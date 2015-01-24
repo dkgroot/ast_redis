@@ -323,8 +323,7 @@ static void redis_dump_ast_event_cache()
 #else
 			struct ast_event_sub *event_sub;
 			event_sub = ast_event_subscribe_new(i, ast_event_cb, NULL);
-//			ast_event_sub_append_ie_raw(event_sub, AST_EVENT_IE_EID, &ast_eid_default, sizeof(ast_eid_default));
-			ast_event_append_eid(event_sub, AST_EVENT_IE_EID, &ast_eid_default);
+			ast_event_sub_append_ie_raw(event_sub, AST_EVENT_IE_EID, &ast_eid_default, sizeof(ast_eid_default));
 			usleep(500);
 			ast_debug(1, "Dumping Past %s Events\n", event_types[i].name);
 			ast_event_dump_cache(event_sub);
@@ -338,7 +337,7 @@ static void redis_dump_ast_event_cache()
 #ifdef HAVE_PBX_STASIS_H
 static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg)
 #else
-static void ast_event_cb(const struct ast_event *event, void *data);
+static void ast_event_cb(const struct ast_event *event, void *data)
 #endif
 {
 	ast_debug(1, "ast_event_cb\n");
