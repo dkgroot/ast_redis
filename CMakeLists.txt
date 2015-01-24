@@ -4,8 +4,8 @@ cmake_minimum_required(VERSION 2.8)
 #--------------------------------------------------
 # Compiler Options
 #--------------------------------------------------
-SET(CMAKE_BUILD_TYPE Debug)
-SET(CMAKE_C_FLAGS_DEBUG "-g -O -Wall -Werror")
+SET(CMAKE_BUILD_TYPE "Debug")
+SET(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Werror")
 SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 
 #--------------------------------------------------
@@ -13,6 +13,11 @@ SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 #-------------------------------------------------- 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules (HIREDIS REQUIRED hiredis)
+
+#--------------------------------------------------
+# LibEvent is required
+#-------------------------------------------------- 
+pkg_check_modules (LIBEVENT REQUIRED libevent)
 
 #--------------------------------------------------
 # Asterisk is required
