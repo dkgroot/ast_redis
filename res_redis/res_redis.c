@@ -23,6 +23,7 @@
  ***/
 
 
+#include "config.h"
 #include <asterisk.h>
 
 #define AST_MODULE "res_redis"
@@ -39,6 +40,9 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/cli.h>
 #include <asterisk/netsock2.h>
 #include <asterisk/devicestate.h>
+#ifdef HAVE_PBX_STASIS_H
+#include <asterisk/stasis.h>
+#endif
 
 #include "../include/ast_event_json.h"
 #include "../include/shared.h"
@@ -59,13 +63,21 @@ char *curserver = NULL;
 static char default_eid_str[32];
 
 /* predeclarations */
+#ifdef HAVE_PBX_STASIS_H
+static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg);
+#else
 static void ast_event_cb(const struct ast_event *event, void *data);
+#endif
 static void redis_dump_ast_event_cache();
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
 
 static struct event_type {
 	const char *name;
+#ifdef HAVE_PBX_STASIS_H
+	struct stasis_subscription *sub;
+#else
 	struct ast_event_sub *sub;
+#endif	
 	unsigned char publish;
 	unsigned char subscribe;
 	unsigned char publish_default;
@@ -164,7 +176,9 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	AST_LOG_NOTICE_DEBUG("Meet\n");
 }
 
-static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) {
+static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
+{
+#ifndef HAVE_PBX_STASIS_H
 	enum ast_event_type event_type;
 	redisReply *reply = r;
 	if (reply == NULL) {
@@ -222,10 +236,18 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 										ast_debug(1, "event: eid: '%s' / %p\n", eid_str1, eid);
 										*/
 										if (res == OK) {
+#ifdef HAVE_PBX_STASIS_H
+											//ast_publish_device_state();
+#else
 											ast_event_queue(event);
+#endif
 										}
 										if (res == OK_CACHABLE) {
+#ifdef HAVE_PBX_STASIS_H
+											//ast_publish_device_state();
+#else
 											ast_event_queue_and_cache(event);
+#endif
 										}
 										ast_debug(1, "ast_event sent'\n");
 									}
@@ -252,6 +274,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 			}
 		}
 	}
+#endif
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
@@ -283,7 +306,6 @@ static void redis_dump_ast_event_cache()
 		unsigned int i = 0;
 		// flush all changes
 		for (i = 0; i < ARRAY_LEN(event_types); i++) {
-			struct ast_event_sub *event_sub;
 			ast_rwlock_rdlock(&event_types_lock);
 			if (!event_types[i].publish) {
 				ast_rwlock_unlock(&event_types_lock);
@@ -293,26 +315,40 @@ static void redis_dump_ast_event_cache()
 			ast_rwlock_unlock(&event_types_lock);
 
 			ast_debug(1, "subscribe %s\n", event_types[i].name);
+#ifdef HAVE_PBX_STASIS_H
+			//struct stasis_subscription *event_sub;
+			//struct stasis_topic *devstate_specific_topic = ast_device_state_topic(NULL);
+			//event_sub = stasis_subscribe(devstate_specific_topic, ast_event_cb, NULL);
+			//ast_event_append_eid(event_sub, AST_EVENT_IE_EID, &ast_eid_default);
+#else
+			struct ast_event_sub *event_sub;
 			event_sub = ast_event_subscribe_new(i, ast_event_cb, NULL);
-			ast_event_sub_append_ie_raw(event_sub, AST_EVENT_IE_EID, &ast_eid_default, sizeof(ast_eid_default));
+//			ast_event_sub_append_ie_raw(event_sub, AST_EVENT_IE_EID, &ast_eid_default, sizeof(ast_eid_default));
+			ast_event_append_eid(event_sub, AST_EVENT_IE_EID, &ast_eid_default);
 			usleep(500);
 			ast_debug(1, "Dumping Past %s Events\n", event_types[i].name);
 			ast_event_dump_cache(event_sub);
 			ast_event_sub_destroy(event_sub);
+#endif
 		}
 		AST_LOG_NOTICE_DEBUG("Ast Event Cache Dumped to %s\n", curserver);
 	}
 }
 
-static void ast_event_cb(const struct ast_event *event, void *data)
+#ifdef HAVE_PBX_STASIS_H
+static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg)
+#else
+static void ast_event_cb(const struct ast_event *event, void *data);
+#endif
 {
 	ast_debug(1, "ast_event_cb\n");
+#ifdef HAVE_PBX_STASIS_H
+#else
 
 	const struct ast_eid *eid;
 	char eid_str[32] = "";
 	eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
 	ast_eid_to_str(eid_str, sizeof(eid_str), (struct ast_eid *) eid);
-
 	//AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event with EID: '%s' / '%s'\n", eid_str, default_eid_str);
 	
 	if (ast_event_get_type(event) == AST_EVENT_PING) {
@@ -374,6 +410,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	} else {
 		ast_log(LOG_ERROR, "event_type does not exist'\n");
 	}
+#endif
 }
 
 static int set_event(const char *event_type, int pubsub, char *str)
@@ -481,7 +518,11 @@ static char *redis_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a
 		return CLI_FAILURE;
 	}
 
-	ast_event_queue(event);
+#ifdef HAVE_PBX_STASIS_H
+	//ast_publish_device_state();
+#else	
+	ast_event_queue_and_cache(event);
+#endif
 
 	return CLI_SUCCESS;
 }
@@ -591,7 +632,11 @@ static void cleanup_module(void)
 	unsigned int i = 0;
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
 		if (event_types[i].sub) {
+#ifdef HAVE_PBX_STASIS_H
+			event_types[i].sub = stasis_unsubscribe(event_types[i].sub);
+#else
 			event_types[i].sub = ast_event_unsubscribe(event_types[i].sub);
+#endif
 		}
 		event_types[i].publish = 0;
 		event_types[i].subscribe = 0;
@@ -659,8 +704,10 @@ static int load_module(void)
 		goto failed;
 	}
 
+#ifdef HAVE_PBX_STASIS_H
+#else
 	ast_enable_distributed_devstate();
-	
+#endif	
 	redis_dump_ast_event_cache();
 
 	ast_rwlock_wrlock(&event_types_lock);
@@ -670,7 +717,12 @@ static int load_module(void)
 			continue;
 		}
 		if (event_types[i].publish && !event_types[i].sub) {
+#ifdef HAVE_PBX_STASIS_H
+			struct stasis_topic *devstate_specific_topic = ast_device_state_topic(NULL);
+			event_types[i].sub = stasis_subscribe(devstate_specific_topic, ast_event_cb, NULL);
+#else
 			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
+#endif
 		}
 		AST_LOG_NOTICE_DEBUG("Subscribing to redis channel '%s'\n", event_types[i].channelstr);
  		redisAsyncCommand(redisSubConn, redis_subscription_cb, NULL, "SUBSCRIBE %s", event_types[i].channelstr);

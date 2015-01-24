@@ -27,12 +27,10 @@ pkg_check_modules (LIBEVENT REQUIRED libevent)
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules")
 FIND_PACKAGE(Asterisk REQUIRED)
 
-INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
-
-#CONFIGURE_FILE ("${PROJECT_SOURCE_DIR}/include/config.h.in" "${PROJECT_BINARY_DIR}/config.h" )
 #--------------------------------------------------
 # Compile Sources
 #--------------------------------------------------
+INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
 
 # Config files
 

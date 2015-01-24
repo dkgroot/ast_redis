@@ -9,6 +9,10 @@
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
  */
+#include "config.h"
+
+#ifndef HAVE_PBX_STASIS_H
+
 #include <asterisk.h>
 
 #define AST_MODULE "res_redis"
@@ -285,3 +289,4 @@ failed:
 	ast_event_destroy(event);
 	return res;
 }
+#endif /* HAVE_PBX_STASIS_H */

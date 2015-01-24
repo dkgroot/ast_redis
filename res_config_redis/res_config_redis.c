@@ -20,6 +20,8 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/utils.h>
 #include <asterisk/cli.h>
 #include <asterisk/threadstorage.h>
+
+#include "config.h"
  
 AST_MUTEX_DEFINE_STATIC(redis_lock);
 AST_THREADSTORAGE(query_buf);
@@ -48,30 +50,51 @@ static struct ast_cli_entry cli_realtime[] = {
 };
 
 
+#ifdef HAVE_PBX_VERSION_11
 static struct ast_variable *realtime_redis(const char *database, const char *tablename, va_list ap)
+#else
+static struct ast_variable *realtime_redis(const char *database, const char *tablename, const struct ast_variable *fields)
+#endif
 {
 	struct ast_variable *var = NULL;
 	return var;
 }
 
+#ifdef HAVE_PBX_VERSION_11
 static struct ast_config *realtime_multi_redis(const char *database, const char *table, va_list ap)
+#else
+static struct ast_config *realtime_multi_redis(const char *database, const char *table, const struct ast_variable *fields)
+#endif
 {
 	struct ast_config *cfg = NULL;
 	return cfg;
 }
 
+#ifdef HAVE_PBX_VERSION_11
 static int update_redis(const char *database, const char *tablename, const char *keyfield,
 						const char *lookup, va_list ap)
+#else
+static int update_redis(const char *database, const char *tablename, const char *keyfield,
+						const char *lookup, const struct ast_variable *fields)
+#endif
 {
 	return -1;
 }
 
+#ifdef HAVE_PBX_VERSION_11
 static int update2_redis(const char *database, const char *tablename, va_list ap)
+#else
+static int update2_redis(const char *database, const char *tablename, const struct ast_variable *lookup_fields, const struct ast_variable *update_fields)
+#endif
 {
 	return -1;
 }
 
+#ifdef HAVE_PBX_VERSION_11
 static int store_redis(const char *database, const char *table, va_list ap)
+#else
+static int store_redis(const char *database, const char *table, const struct ast_variable *fields)
+#endif
 {
 	ast_mutex_unlock(&redis_lock);
 	if (!redis_reconnect(database)) {
@@ -81,7 +104,11 @@ static int store_redis(const char *database, const char *table, va_list ap)
 	return -1;
 }
 
+#ifdef HAVE_PBX_VERSION_11
 static int destroy_redis(const char *database, const char *table, const char *keyfield, const char *lookup, va_list ap)
+#else
+static int destroy_redis(const char *database, const char *table, const char *keyfield, const char *lookup, const struct ast_variable *fields)
+#endif
 {
 	ast_mutex_unlock(&redis_lock);
 	if (!redis_reconnect(database)) {
