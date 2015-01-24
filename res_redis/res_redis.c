@@ -43,6 +43,8 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 
 #include "ast_event_json.h"
 
+#define AST_LOG_NOTICE_DEBUG(...) {ast_log(LOG_NOTICE, __VA_ARGS__);ast_debug(1, __VA_ARGS__);}
+
 /* globals */
 AST_RWLOCK_DEFINE_STATIC(event_types_lock);
 AST_MUTEX_DEFINE_STATIC(redis_lock);
@@ -61,10 +63,6 @@ char default_eid_str[32];
 /* predeclarations */
 static void ast_event_cb(const struct ast_event *event, void *data);
 static void redis_dump_ast_event_cache();
-//static int redis_decode_msg2mwi(struct ast_event **eventref, const char *msg);
-//static int redis_encode_mwi2msg(char *msg, const size_t msg_len, const struct ast_event *event);
-//static int redis_decode_msg2devicestate(struct ast_event **eventref, const char *msg);
-//static int redis_encode_devicestate2msg(char *msg, const size_t msg_len, const struct ast_event *event);
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
 
 static struct event_type {
@@ -115,9 +113,9 @@ static int redis_connect_nextserver()
 	}	
 	while (servers && curserver) {
 		server = ast_trim_blanks(ast_strdupa(ast_skip_blanks(curserver)));
-		ast_log(LOG_NOTICE, "Connecting to curserver:'%s', server:'%s' / servers:'%s' / remaining:'%s'\n", curserver, server, servers, remaining);
+		ast_debug(1, "Connecting to curserver:'%s', server:'%s' / servers:'%s' / remaining:'%s'\n", curserver, server, servers, remaining);
 		if (server[0] == '/') {
-			ast_log(LOG_NOTICE, "Use Socket: %s\n", server);
+			AST_LOG_NOTICE_DEBUG("Use Socket: %s\n", server);
 			redisPubConn = redisAsyncConnectUnix(server);
 			redisSubConn = redisAsyncConnectUnix(server);
 		} else {
@@ -125,7 +123,7 @@ static int redis_connect_nextserver()
 			if (!ast_strlen_zero(portstr)) {
 				port = atoi(portstr);
 			}
-			ast_log(LOG_NOTICE, "Use Server: '%s', Port: '%d'\n", server, port);
+			AST_LOG_NOTICE_DEBUG("Use Server: '%s', Port: '%d'\n", server, port);
 			if (!ast_strlen_zero(server)) {
 				redisPubConn = redisAsyncConnect(server, port);
 				redisSubConn = redisAsyncConnect(server, port);
@@ -144,7 +142,7 @@ static int redis_connect_nextserver()
 				return 0;
 			}
 		}
-		ast_log(LOG_NOTICE, "Async Connection Started %s\n", curserver);
+		AST_LOG_NOTICE_DEBUG("Async Connection Started %s\n", curserver);
 		break;
 	}
 	redis_dump_ast_event_cache();
@@ -156,7 +154,7 @@ void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	if (reply == NULL) {
 		return;
 	}
-	ast_log(LOG_NOTICE, "Pong\n");
+	AST_LOG_NOTICE_DEBUG("Pong\n");
 }
 
 void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
@@ -164,7 +162,7 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	if (reply == NULL) {
 		return;
 	}
-	ast_log(LOG_NOTICE, "Meet\n");
+	AST_LOG_NOTICE_DEBUG("Meet\n");
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) {
@@ -175,11 +173,11 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
 /*		for (j = 0; j < reply->elements; j++) {
-			ast_log(LOG_NOTICE, "REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
+			AST_LOG_NOTICE_DEBUG("REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
 		}*/
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
 			if (!ast_strlen_zero(reply->element[1]->str) && !ast_strlen_zero(reply->element[2]->str)) {
-				ast_log(LOG_NOTICE, "start decoding'\n");
+				ast_debug(1, "start decoding'\n");
 				struct event_type *etype;
 				
 				ast_rwlock_rdlock(&event_types_lock);
@@ -201,8 +199,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 							if ((res = redis_decode_msg2event(&event, msg))) {
 								if (res == EID_SELF) {
 									// skip feeding back to self
-									// ast_log(LOG_NOTICE, "Originated Here. skip'\n");
-//									ast_event_destroy(event);
+									ast_debug(1, "Originated Here. skip'\n");
 									return;
 								} else {
 									/*
@@ -212,10 +209,10 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 									if (eid) {
 										ast_eid_to_str(eid_str1, sizeof(eid_str1), (void *)eid);
 									}
-									ast_log(LOG_NOTICE, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
-									ast_log(LOG_NOTICE, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
-									ast_log(LOG_NOTICE, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
-									ast_log(LOG_NOTICE, "event: eid: '%s' / %p\n", eid_str1, eid);
+									ast_debug(1, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
+									ast_debug(1, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
+									ast_debug(1, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
+									ast_debug(1, "event: eid: '%s' / %p\n", eid_str1, eid);
 									*/
 									if (res == OK) {
 										ast_event_queue(event);
@@ -223,25 +220,24 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 									if (res == OK_CACHABLE) {
 										ast_event_queue_and_cache(event);
 									}
-									ast_log(LOG_NOTICE, "ast_event sent'\n");
+									ast_debug(1, "ast_event sent'\n");
 								}
 							} else {
-								ast_log(LOG_NOTICE, "error decoding %s'\n", msg);
-//								ast_event_destroy(event);
+								ast_log(LOG_ERROR, "error decoding %s'\n", msg);
 							}
 						} else {
-							ast_log(LOG_NOTICE, "has different channelstr '%s'\n", etype->channelstr);
+							ast_debug(1, "has different channelstr '%s'\n", etype->channelstr);
 						}
 					} else {
-						ast_log(LOG_NOTICE, "event_type should not be published'\n");
+						ast_debug(1, "event_type should not be published'\n");
 					}
 				} else {
-					ast_log(LOG_NOTICE, "event_type does not exist'\n");
+					ast_log(LOG_ERROR, "event_type does not exist'\n");
 				}
 			}
 		} else {
 			for (j = 0; j < reply->elements; j++) {
-				ast_log(LOG_NOTICE, "REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
+				ast_debug(1, "REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
 			}
 		}
 	}
@@ -252,7 +248,7 @@ void redis_connect_cb(const redisAsyncContext *c, int status) {
 		printf("Error: %s\n", c->errstr);
 		return;
 	}
-	ast_log(LOG_NOTICE, "Connected\n");
+	AST_LOG_NOTICE_DEBUG("Connected\n");
 }
 
 void redis_disconnect_cb(const redisAsyncContext *c, int status) {
@@ -260,7 +256,7 @@ void redis_disconnect_cb(const redisAsyncContext *c, int status) {
 		printf("Error: %s\n", c->errstr);
 		return;
 	}
-	ast_log(LOG_NOTICE, "Disconnected\n");
+	AST_LOG_NOTICE_DEBUG("Disconnected\n");
 	ast_mutex_lock(&redis_lock);
 	if (!stoprunning) {
 		redis_connect_nextserver();
@@ -272,7 +268,7 @@ void redis_disconnect_cb(const redisAsyncContext *c, int status) {
 static void redis_dump_ast_event_cache()
 {
 	if (dispatch_thread_id != AST_PTHREADT_NULL) {
-		ast_log(LOG_NOTICE, "Dumping Ast Event Cache to %s\n", curserver);
+		ast_debug(1, "Dumping Ast Event Cache to %s\n", curserver);
 		unsigned int i = 0;
 		// flush all changes
 		for (i = 0; i < ARRAY_LEN(event_types); i++) {
@@ -280,39 +276,26 @@ static void redis_dump_ast_event_cache()
 			ast_rwlock_rdlock(&event_types_lock);
 			if (!event_types[i].publish) {
 				ast_rwlock_unlock(&event_types_lock);
-				ast_log(LOG_NOTICE, "%s skipping not published\n", event_types[i].name);
+				ast_debug(1, "%s skipping not published\n", event_types[i].name);
 				continue;
 			}
 			ast_rwlock_unlock(&event_types_lock);
 
-			ast_log(LOG_NOTICE, "subscribe %s\n", event_types[i].name);
+			ast_debug(1, "subscribe %s\n", event_types[i].name);
 			event_sub = ast_event_subscribe_new(i, ast_event_cb, NULL);
 			ast_event_sub_append_ie_raw(event_sub, AST_EVENT_IE_EID, &ast_eid_default, sizeof(ast_eid_default));
 			usleep(500);
-			ast_log(LOG_NOTICE, "Dumping Past %s Events\n", event_types[i].name);
+			ast_debug(1, "Dumping Past %s Events\n", event_types[i].name);
 			ast_event_dump_cache(event_sub);
 			ast_event_sub_destroy(event_sub);
 		}
-		ast_log(LOG_NOTICE, "Ast Event Cache Dumped to %s\n", curserver);
+		AST_LOG_NOTICE_DEBUG("Ast Event Cache Dumped to %s\n", curserver);
 	}
 }
 
-/*
-static void json_escape(char *out, const char *in)
-{
-        for (; *in; in++) {
-                if (*in == '\"') {
-                        *out++ = '\\';
-                }
-                *out++ = *in;
-        }
-        *out = '\0';
-}
-*/
-
 static void ast_event_cb(const struct ast_event *event, void *data)
 {
-	ast_log(LOG_NOTICE, "ast_event_cb\n");
+	ast_debug(1, "ast_event_cb\n");
 
 	const struct ast_eid *eid;
 	char eid_str[32] = "";
@@ -320,7 +303,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	ast_eid_to_str(eid_str, sizeof(eid_str), (struct ast_eid *) eid);
 
 	if (ast_event_get_type(event) == AST_EVENT_PING) {
-		ast_log(LOG_NOTICE, "(ast_event_cb) Got event PING from server with EID: '%s' (Add Handler)\n", eid_str);
+		AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event PING from server with EID: '%s' (Add Handler)\n", eid_str);
 		/*
 		if (ast_event_get_type(event) == AST_EVENT_PING) {
 			const struct ast_eid *eid;
@@ -328,7 +311,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 
 			eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
 			ast_eid_to_str(buf, sizeof(buf), (struct ast_eid *) eid);
-			ast_log(LOG_NOTICE, "(ast_deliver_event) Got event PING from server with EID: '%s'\n", buf);
+			ast_debug(1, "(ast_deliver_event) Got event PING from server with EID: '%s'\n", buf);
 
 			ast_event_queue(event);
 		*/
@@ -344,12 +327,12 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	
 	if (ast_eid_cmp(&ast_eid_default, eid)) {
 		// If the event didn't originate from this server, don't send it back out.
-		ast_log(LOG_NOTICE, "(ast_event_cb) didn't originate from this server, don't send it back out: (excep from :'%s')\n", eid_str);
+		ast_debug(1, "(ast_event_cb) didn't originate from this server, don't send it back out: (excep from :'%s')\n", eid_str);
 		return;
 	}
 	
 	// decode event2msg
-	ast_log(LOG_NOTICE, "(ast_event_cb) decode incoming message\n");
+	ast_debug(1, "(ast_event_cb) decode incoming message\n");
 	struct event_type *etype;
 	char *msg = ast_alloca(MAX_EVENT_LENGTH + 1);
 	
@@ -360,20 +343,19 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	if (etype) {
 		if (etype->publish) {
 			if (redis_encode_event2msg(msg, MAX_EVENT_LENGTH, event)) {
-				ast_log(LOG_NOTICE, "sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
-//				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %s", etype->channelstr, msg);
+				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
 				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
 				if (redisPubConn->err) {
 					ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 				}
 			} else {
-				ast_log(LOG_NOTICE, "error encoding %s'\n", msg);
+				ast_log(LOG_ERROR, "error encoding %s'\n", msg);
 			}
 		} else {
-			ast_log(LOG_NOTICE, "event_type should not be published'\n");
+			ast_debug(1, "event_type should not be published'\n");
 		}
 	} else {
-		ast_log(LOG_NOTICE, "event_type does not exist'\n");
+		ast_log(LOG_ERROR, "event_type does not exist'\n");
 	}
 }
 
@@ -500,8 +482,12 @@ static int load_general_config(struct ast_config *cfg)
 	ast_rwlock_wrlock(&event_types_lock);
 	for (v = ast_variable_browse(cfg, "general"); v && !res; v = v->next) {
 		if (!strcasecmp(v->name, "servers")) {
-			//ast_free(servers);
+			AST_LOG_NOTICE_DEBUG("Set Servers %s to '%s'\n", servers, v->value);
+			if (servers) {
+				ast_free(servers);
+			}
 			servers = strdup(v->value);
+			AST_LOG_NOTICE_DEBUG("Set Servers %s to '%s'\n", servers, v->value);
 		} else if (!strcasecmp(v->name, "mwi_prefix")) {
 			res = set_event("mwi", PREFIX, strdup(v->value)); 
 		} else if (!strcasecmp(v->name, "publish_mwi_event")) {
@@ -600,7 +586,6 @@ static void cleanup_module(void)
 	
 	if (servers) {
 		ast_free(servers);
-		servers = strdup(default_servers);
 	}
 }
 
@@ -609,7 +594,7 @@ static int load_module(void)
 	enum ast_module_load_result res = AST_MODULE_LOAD_FAILURE;
 	unsigned int i = 0;
 
-	ast_log(LOG_NOTICE, "Loading res_config_redis...\n");
+	AST_LOG_NOTICE_DEBUG("Loading res_config_redis...\n");
 	ast_debug(1, "Loading res_config_redis...\n");
 
         ast_eid_to_str(default_eid_str, sizeof(default_eid_str), &ast_eid_default);
@@ -647,13 +632,13 @@ static int load_module(void)
 	ast_rwlock_wrlock(&event_types_lock);
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
 		if (!event_types[i].publish) {
-			ast_log(LOG_NOTICE, "Skipping '%s' not published\n", event_types[i].channelstr);
+			ast_debug(1, "Skipping '%s' not published\n", event_types[i].channelstr);
 			continue;
 		}
 		if (event_types[i].publish && !event_types[i].sub) {
 			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
 		}
-		ast_log(LOG_NOTICE, "Subscribing to redis channel '%s'\n", event_types[i].channelstr);
+		AST_LOG_NOTICE_DEBUG("Subscribing to redis channel '%s'\n", event_types[i].channelstr);
  		redisAsyncCommand(redisSubConn, redis_subscription_cb, NULL, "SUBSCRIBE %s", event_types[i].channelstr);
 		if (redisSubConn->err) {
 			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisSubConn->errstr);
@@ -665,7 +650,6 @@ static int load_module(void)
 
 failed:
 	cleanup_module();
-
 	return res;
 }
 
@@ -690,11 +674,14 @@ static int reload(void)
 
 	ast_debug(1, "Reloading res_config_redis...\n");
 	cleanup_module();
-	if (load_config(0)) {
+	if (load_config(1)) {
 		// simply not configured is not a fatal error
 		res = AST_MODULE_LOAD_DECLINE;
 		goto failed;
 	}
+	redisAsyncDisconnect(redisSubConn);
+	redisAsyncDisconnect(redisPubConn);
+	
 	if (!redis_connect_nextserver()) {
 		if (redisPubConn->err) {
 			ast_log(LOG_ERROR, "connecting to any of the redis servers failed: error: %s..\n", redisPubConn->errstr);
@@ -709,13 +696,13 @@ static int reload(void)
 	ast_rwlock_wrlock(&event_types_lock);
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
 		if (!event_types[i].publish) {
-			ast_log(LOG_NOTICE, "Skipping '%s' not published\n", event_types[i].channelstr);
+			ast_debug(1, "Skipping '%s' not published\n", event_types[i].channelstr);
 			continue;
 		}
 		if (event_types[i].publish && !event_types[i].sub) {
 			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
 		}
-		ast_log(LOG_NOTICE, "Subscribing to redis channel '%s'\n", event_types[i].channelstr);
+		AST_LOG_NOTICE_DEBUG("Subscribing to redis channel '%s'\n", event_types[i].channelstr);
  		redisAsyncCommand(redisSubConn, redis_subscription_cb, NULL, "SUBSCRIBE %s", event_types[i].channelstr);
 		if (redisSubConn->err) {
 			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisSubConn->errstr);
