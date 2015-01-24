@@ -76,7 +76,8 @@ static struct event_type {
 	char *prefix;
 } event_types[] = {
 	[AST_EVENT_MWI] = { .name = "mwi"},
-	[AST_EVENT_DEVICE_STATE_CHANGE] = { .name = "device_state"},
+	[AST_EVENT_DEVICE_STATE_CHANGE] = { .name = "device_state_change"},
+	[AST_EVENT_DEVICE_STATE] = { .name = "device_state"},
 	[AST_EVENT_PING] = { .name = "ping", .publish_default = 1, .subscribe_default = 1 },
 };
 
@@ -362,6 +363,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 static int set_event(const char *event_type, int pubsub, char *str)
 {
 	unsigned int i;
+	AST_LOG_NOTICE_DEBUG("set_event: %d, %s\n", pubsub, str);
 
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
 		if (!event_types[i].name || strcasecmp(event_type, event_types[i].name)) {
@@ -383,6 +385,7 @@ static int set_event(const char *event_type, int pubsub, char *str)
 
 		break;
 	}
+	AST_LOG_NOTICE_DEBUG("set_event: returning: %d\n", (i == ARRAY_LEN(event_types)) ? -1 : 0);
 
 	return (i == ARRAY_LEN(event_types)) ? -1 : 0;
 }
@@ -482,24 +485,33 @@ static int load_general_config(struct ast_config *cfg)
 	ast_rwlock_wrlock(&event_types_lock);
 	for (v = ast_variable_browse(cfg, "general"); v && !res; v = v->next) {
 		if (!strcasecmp(v->name, "servers")) {
-			AST_LOG_NOTICE_DEBUG("Set Servers %s to '%s'\n", servers, v->value);
 			if (servers) {
 				ast_free(servers);
+				servers = NULL;
 			}
 			servers = strdup(v->value);
 			AST_LOG_NOTICE_DEBUG("Set Servers %s to '%s'\n", servers, v->value);
+			
 		} else if (!strcasecmp(v->name, "mwi_prefix")) {
 			res = set_event("mwi", PREFIX, strdup(v->value)); 
 		} else if (!strcasecmp(v->name, "publish_mwi_event")) {
 			res = set_event("mwi", PUBLISH, strdup(v->value)); 
 		} else if (!strcasecmp(v->name, "subscribe_mwi_event")) {
 			res = set_event("mwi", SUBSCRIBE, strdup(v->value)); 
+			
 		} else if (!strcasecmp(v->name, "devicestate_prefix")) {
 			res = set_event("device_state", PREFIX, strdup(v->value)); 
 		} else if (!strcasecmp(v->name, "publish_devicestate_event")) {
 			res = set_event("device_state", PUBLISH, strdup(v->value)); 
 		} else if (!strcasecmp(v->name, "subscribe_devicestate_event")) {
 			res = set_event("device_state", SUBSCRIBE, strdup(v->value)); 
+			
+		} else if (!strcasecmp(v->name, "devicestate_change_prefix")) {
+			res = set_event("device_state_change", PREFIX, strdup(v->value)); 
+		} else if (!strcasecmp(v->name, "publish_devicestate_change_event")) {
+			res = set_event("device_state_change", PUBLISH, strdup(v->value)); 
+		} else if (!strcasecmp(v->name, "subscribe_devicestate_change_event")) {
+			res = set_event("device_state_change", SUBSCRIBE, strdup(v->value));
 		} else {
 			ast_log(LOG_WARNING, "Unknown option '%s'\n", v->name);
 		}
@@ -508,6 +520,7 @@ static int load_general_config(struct ast_config *cfg)
 	if (!servers) {
 		servers = strdup(default_servers);
 	}
+	AST_LOG_NOTICE_DEBUG("Done loading config\n");
 
 	return res;
 }
@@ -568,9 +581,11 @@ static void cleanup_module(void)
 		event_types[i].subscribe = 0;
 		if (event_types[i].channelstr) {
 			ast_free(event_types[i].channelstr);
+			event_types[i].channelstr = NULL;
 		}
 		if (event_types[i].prefix) {
 			ast_free(event_types[i].prefix);
+			event_types[i].prefix = NULL;
 		}
 	}
 
@@ -586,6 +601,7 @@ static void cleanup_module(void)
 	
 	if (servers) {
 		ast_free(servers);
+		servers = NULL;
 	}
 }
 
@@ -600,8 +616,10 @@ static int load_module(void)
         ast_eid_to_str(default_eid_str, sizeof(default_eid_str), &ast_eid_default);
 	if (load_config(0)) {
 		// simply not configured is not a fatal error
+		ast_log(LOG_ERROR, "Declining load of the module, until config issue is resolved\n");
 		res = AST_MODULE_LOAD_DECLINE;
-		goto failed;
+		return res;
+		//goto failed;
 	}
 
 	ast_cli_register_multiple(redis_cli, ARRAY_LEN(redis_cli));
@@ -645,6 +663,7 @@ static int load_module(void)
 		}
 	}
 	ast_rwlock_unlock(&event_types_lock);
+	AST_LOG_NOTICE_DEBUG("res_redis loaded\n");
 	
 	return AST_MODULE_LOAD_SUCCESS;
 
