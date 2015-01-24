@@ -9,5 +9,20 @@
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
  */
-int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_event *event);
-int redis_decode_msg2event(struct ast_event **eventref, enum ast_event_type event_type, const char *msg);
+
+/*!
+ * \file
+ * \author Diederik de Groot <ddegroot@users.sf.net>
+ *
+ * This module is based on the res_corosync module.
+ */
+#define AST_LOG_NOTICE_DEBUG(...) {ast_log(LOG_NOTICE, __VA_ARGS__);ast_debug(1, __VA_ARGS__);}
+
+enum returnvalues {
+	MALLOC_ERROR,
+	DECODING_ERROR,
+	EID_SELF,
+	OK,
+	OK_CACHABLE,
+};
+

@@ -18,8 +18,18 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include "asterisk/devicestate.h"
 #include "asterisk/event.h"
 #include "ast_event_json.h"
+#include "shared.h"
 
-/* Fix: required because of broken _ast_event_str_to_ie_type implementation */
+/* copied from asterisk/event.c */
+struct ast_event {  
+        /*! Event type */ 
+        enum ast_event_type type:16;
+        /*! Total length of the event */
+        uint16_t event_len:16;
+        /*! The data payload of the event, made up of information elements */
+        unsigned char payload[0];
+} __attribute__((packed));
+
 static const struct ie_map {
 	enum ast_event_ie_pltype ie_pltype;
 	const char *name;
@@ -85,7 +95,9 @@ static const struct ie_map {
 	[AST_EVENT_IE_PRESENCE_SUBTYPE]    = { AST_EVENT_IE_PLTYPE_STR,  "PresenceSubtype" },
 	[AST_EVENT_IE_PRESENCE_MESSAGE]    = { AST_EVENT_IE_PLTYPE_STR,  "PresenceMessage" },
 };
+/* end copy */
 
+/* Fix: required because of broken _ast_event_str_to_ie_type implementation */
 int fixed_ast_event_str_to_ie_type(const char *str, enum ast_event_ie_type *ie_type)
 {
         int i;
@@ -179,7 +191,7 @@ int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_eve
 }
 
 /* generic json to ast_event decoder */
-int redis_decode_msg2event(struct ast_event **eventref, const char *msg)
+int redis_decode_msg2event(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
 {
 	int res = DECODING_ERROR;
 	struct ast_event *event = *eventref;
@@ -187,17 +199,22 @@ int redis_decode_msg2event(struct ast_event **eventref, const char *msg)
 	char *tokenstr = strdupa(msg);
 	trim_char_bothends(tokenstr,0);
 
-	if (!(event = ast_event_new(AST_EVENT_DEVICE_STATE_CHANGE, AST_EVENT_IE_END))) {
-		return DECODING_ERROR;
-	}
-	
 	char *entry = NULL;
 	char *key = NULL;
 	char *value = NULL;
 	char delims[]=",";
 	int cachable = 0;
+
+//	if (!(event = ast_event_new(event_type, AST_EVENT_IE_END))) {		/* can't use this because it automatically adds my local EID to the new event */
+//		return DECODING_ERROR;
+//	}
+        if (!(event = ast_calloc(1, sizeof(*event)))) {				/* resorting to local copy of ast_event structure :-( */
+                return MALLOC_ERROR; 
+        }
+        event->type = htons(event_type);
+        event->event_len = htons(sizeof(*event));
 	
-	ast_debug(1, "Decoding Msg2Event: %s\n", tokenstr);
+	ast_debug(1, "Decoding Msg2Event %s, content: '%s'\n", ast_event_get_type_name(event), tokenstr);
 	entry = strtok(tokenstr, delims);
 	while (entry) {
 		value = strdupa(entry);
@@ -241,18 +258,26 @@ int redis_decode_msg2event(struct ast_event **eventref, const char *msg)
 							res = EID_SELF;
 							goto failed;
 						}
-					        ast_event_append_ie_raw(&event, AST_EVENT_IE_PLTYPE_RAW, &eid, sizeof(eid));
+					        ast_event_append_ie_raw(&event, ie_type, &eid, sizeof(eid));
 					} else {
 						ast_event_append_ie_raw(&event, ie_type, value, strlen(value));
 					}
 					break;
 			}
+			/* realloc inside one of the append functions failed */
+			if (!event) {
+			        return DECODING_ERROR;
+                        }
 		}
 		entry = strtok(NULL, delims);
 	}
-	*eventref = event;
+
+	if (!ast_event_get_ie_raw(event, AST_EVENT_IE_EID)) {
+	         ast_event_append_eid(&event);
+	}
 
 	ast_debug(1, "decoded msg into event\n");
+	*eventref = event;
 	return OK + cachable;
 
 failed:

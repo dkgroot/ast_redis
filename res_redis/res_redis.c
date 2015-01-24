@@ -42,8 +42,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include "asterisk/event.h"
 
 #include "ast_event_json.h"
-
-#define AST_LOG_NOTICE_DEBUG(...) {ast_log(LOG_NOTICE, __VA_ARGS__);ast_debug(1, __VA_ARGS__);}
+#include "shared.h"
 
 /* globals */
 AST_RWLOCK_DEFINE_STATIC(event_types_lock);
@@ -58,7 +57,7 @@ static redisAsyncContext *redisPubConn = NULL;
 char default_servers[] = "127.0.0.1:6379";
 char *servers = NULL;
 char *curserver = NULL;
-char default_eid_str[32];
+static char default_eid_str[32];
 
 /* predeclarations */
 static void ast_event_cb(const struct ast_event *event, void *data);
@@ -167,76 +166,88 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) {
-	int j;
+	enum ast_event_type event_type;
 	redisReply *reply = r;
 	if (reply == NULL) {
 		return;
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
-/*		for (j = 0; j < reply->elements; j++) {
-			AST_LOG_NOTICE_DEBUG("REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
-		}*/
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
-			if (!ast_strlen_zero(reply->element[1]->str) && !ast_strlen_zero(reply->element[2]->str)) {
-				ast_debug(1, "start decoding'\n");
-				struct event_type *etype;
-				
-				ast_rwlock_rdlock(&event_types_lock);
-				etype = &event_types[AST_EVENT_DEVICE_STATE_CHANGE];
-				ast_rwlock_unlock(&event_types_lock);
-				
+			struct event_type *etype;
+			if (!ast_strlen_zero(reply->element[1]->str)) {
+				for (event_type = 0; event_type < ARRAY_LEN(event_types); event_type++) {
+					ast_rwlock_rdlock(&event_types_lock);
+					if (!event_types[event_type].channelstr) {
+						ast_rwlock_unlock(&event_types_lock);
+						continue;
+					}
+					if (!strcmp(event_types[event_type].channelstr, reply->element[1]->str)) {
+						etype = &event_types[event_type];
+						ast_rwlock_unlock(&event_types_lock);
+						break;
+					}
+					ast_rwlock_unlock(&event_types_lock);
+				}
+			
 				if (etype) {
-					if (etype->publish) {
-						if (!strcasecmp(reply->element[1]->str, etype->channelstr)) {
-							struct ast_event *event = NULL;
-							char *msg = ast_strdupa(reply->element[2]->str);
-							unsigned int res = 0;
-							
-							if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
-								ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
-								return;
-							}
-
-							if ((res = redis_decode_msg2event(&event, msg))) {
-								if (res == EID_SELF) {
-									// skip feeding back to self
-									ast_debug(1, "Originated Here. skip'\n");
+					if (!ast_strlen_zero(reply->element[2]->str)) {
+						ast_debug(1, "start decoding'\n");
+					
+						if (etype->publish) {
+							if (!strcasecmp(reply->element[1]->str, etype->channelstr)) {
+								struct ast_event *event = NULL;
+								char *msg = ast_strdupa(reply->element[2]->str);
+								unsigned int res = 0;
+								
+								if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
+									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
 									return;
+								}
+
+								if ((res = redis_decode_msg2event(&event, event_type, msg))) {
+									if (res == EID_SELF) {
+										// skip feeding back to self
+										ast_debug(1, "Originated Here. skip'\n");
+										return;
+									} else {
+										/*
+										// check decoding
+										char eid_str1[32];
+										const void *eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
+										if (eid) {
+											ast_eid_to_str(eid_str1, sizeof(eid_str1), (void *)eid);
+										}
+										ast_debug(1, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
+										ast_debug(1, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
+										ast_debug(1, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
+										ast_debug(1, "event: eid: '%s' / %p\n", eid_str1, eid);
+										*/
+										if (res == OK) {
+											ast_event_queue(event);
+										}
+										if (res == OK_CACHABLE) {
+											ast_event_queue_and_cache(event);
+										}
+										ast_debug(1, "ast_event sent'\n");
+									}
 								} else {
-									/*
-									// check decoding
-									char eid_str1[32];
-									const void *eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
-									if (eid) {
-										ast_eid_to_str(eid_str1, sizeof(eid_str1), (void *)eid);
-									}
-									ast_debug(1, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
-									ast_debug(1, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
-									ast_debug(1, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
-									ast_debug(1, "event: eid: '%s' / %p\n", eid_str1, eid);
-									*/
-									if (res == OK) {
-										ast_event_queue(event);
-									}
-									if (res == OK_CACHABLE) {
-										ast_event_queue_and_cache(event);
-									}
-									ast_debug(1, "ast_event sent'\n");
+									ast_log(LOG_ERROR, "error decoding %s'\n", msg);
 								}
 							} else {
-								ast_log(LOG_ERROR, "error decoding %s'\n", msg);
+								ast_debug(1, "has different channelstr '%s'\n", etype->channelstr);
 							}
 						} else {
-							ast_debug(1, "has different channelstr '%s'\n", etype->channelstr);
+							ast_debug(1, "event_type should not be published\n");
 						}
 					} else {
-						ast_debug(1, "event_type should not be published'\n");
+						ast_debug(1, "message content is zero\n");
 					}
 				} else {
 					ast_log(LOG_ERROR, "event_type does not exist'\n");
 				}
 			}
 		} else {
+			int j;
 			for (j = 0; j < reply->elements; j++) {
 				ast_debug(1, "REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
 			}
@@ -303,6 +314,8 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
 	ast_eid_to_str(eid_str, sizeof(eid_str), (struct ast_eid *) eid);
 
+	//AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event with EID: '%s' / '%s'\n", eid_str, default_eid_str);
+	
 	if (ast_event_get_type(event) == AST_EVENT_PING) {
 		AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event PING from server with EID: '%s' (Add Handler)\n", eid_str);
 		/*
@@ -328,14 +341,18 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	
 	if (ast_eid_cmp(&ast_eid_default, eid)) {
 		// If the event didn't originate from this server, don't send it back out.
-		ast_debug(1, "(ast_event_cb) didn't originate from this server, don't send it back out: (excep from :'%s')\n", eid_str);
+		ast_debug(1, "(ast_event_cb) didn't originate on this server, don't send it back out, skipping: '%s')\n", eid_str);
 		return;
 	}
+	AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event from EID: '%s'\n", eid_str);
 	
 	// decode event2msg
 	ast_debug(1, "(ast_event_cb) decode incoming message\n");
 	struct event_type *etype;
 	char *msg = ast_alloca(MAX_EVENT_LENGTH + 1);
+	if (!msg) {
+		return /* MALLOC_ERROR */;
+	}
 	
 	ast_rwlock_rdlock(&event_types_lock);
 	etype = &event_types[ast_event_get_type(event)];
