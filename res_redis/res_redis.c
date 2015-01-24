@@ -53,8 +53,9 @@ struct event_base *eventbase = NULL;
 unsigned int stoprunning = 0;
 static redisAsyncContext *redisSubConn = NULL;
 static redisAsyncContext *redisPubConn = NULL;
-char *servers = "127.0.0.1:6379";
-char *curserver = "";
+char default_servers[] = "127.0.0.1:6379";
+char *servers = NULL;
+char *curserver = NULL;
 char default_eid_str[32];
 
 /* predeclarations */
@@ -612,7 +613,7 @@ static int load_general_config(struct ast_config *cfg)
 	ast_rwlock_wrlock(&event_types_lock);
 	for (v = ast_variable_browse(cfg, "general"); v && !res; v = v->next) {
 		if (!strcasecmp(v->name, "servers")) {
-			ast_free(servers);
+			//ast_free(servers);
 			servers = strdup(v->value);
 		} else if (!strcasecmp(v->name, "mwi_prefix")) {
 			res = set_event("mwi", PREFIX, strdup(v->value)); 
@@ -631,6 +632,9 @@ static int load_general_config(struct ast_config *cfg)
 		}
 	}
 	ast_rwlock_unlock(&event_types_lock);
+	if (!servers) {
+		servers = strdup(default_servers);
+	}
 
 	return res;
 }
@@ -709,7 +713,7 @@ static void cleanup_module(void)
 	
 	if (servers) {
 		ast_free(servers);
-		servers = strdup("127.0.0.1:6379");
+		servers = strdup(default_servers);
 	}
 }
 
