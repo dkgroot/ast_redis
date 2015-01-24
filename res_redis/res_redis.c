@@ -28,7 +28,6 @@
 #define AST_MODULE "res_redis"
 
 ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
-
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
 #include <hiredis/adapters/libevent.h>
@@ -40,8 +39,9 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include "asterisk/cli.h"
 #include "asterisk/netsock2.h"
 #include "asterisk/devicestate.h"
-//#include "asterisk/strings.h"
 #include "asterisk/event.h"
+
+#include "ast_event_json.h"
 
 /* globals */
 AST_RWLOCK_DEFINE_STATIC(event_types_lock);
@@ -61,10 +61,10 @@ char default_eid_str[32];
 /* predeclarations */
 static void ast_event_cb(const struct ast_event *event, void *data);
 static void redis_dump_ast_event_cache();
-static int redis_decode_msg2mwi(struct ast_event **eventref, const char *msg);
-static int redis_encode_mwi2msg(char *msg, const size_t msg_len, const struct ast_event *event);
-static int redis_decode_msg2devicestate(struct ast_event **eventref, const char *msg);
-static int redis_encode_devicestate2msg(char *msg, const size_t msg_len, const struct ast_event *event);
+//static int redis_decode_msg2mwi(struct ast_event **eventref, const char *msg);
+//static int redis_encode_mwi2msg(char *msg, const size_t msg_len, const struct ast_event *event);
+//static int redis_decode_msg2devicestate(struct ast_event **eventref, const char *msg);
+//static int redis_encode_devicestate2msg(char *msg, const size_t msg_len, const struct ast_event *event);
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
 
 static struct event_type {
@@ -76,12 +76,9 @@ static struct event_type {
 	unsigned char subscribe_default;
 	char *channelstr;
 	char *prefix;
-	void (*redis_subscription_cb) (redisAsyncContext *c, void *r, void *privdata);
-	int (*encode_event2msg) (char *msg, const size_t msg_len, const struct ast_event *event);
-	int (*decode_msg2event) (struct ast_event **eventref, const char *msg);
 } event_types[] = {
-	[AST_EVENT_MWI] = { .name = "mwi", .redis_subscription_cb = redis_subscription_cb, .encode_event2msg = redis_encode_mwi2msg, .decode_msg2event = redis_decode_msg2mwi},
-	[AST_EVENT_DEVICE_STATE_CHANGE] = { .name = "device_state", .redis_subscription_cb = redis_subscription_cb, .encode_event2msg = redis_encode_devicestate2msg, .decode_msg2event = redis_decode_msg2devicestate},
+	[AST_EVENT_MWI] = { .name = "mwi"},
+	[AST_EVENT_DEVICE_STATE_CHANGE] = { .name = "device_state"},
 	[AST_EVENT_PING] = { .name = "ping", .publish_default = 1, .subscribe_default = 1 },
 };
 
@@ -154,14 +151,6 @@ static int redis_connect_nextserver()
 	return -1;
 }
 
-
-enum {
-	DECODING_ERROR,
-	EID_SELF,
-	OK,
-	OK_CACHABLE,
-};
-
 void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	if (reply == NULL) {
@@ -176,140 +165,6 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 		return;
 	}
 	ast_log(LOG_NOTICE, "Meet\n");
-}
-static int redis_decode_msg2mwi(struct ast_event **eventref, const char *msg)
-{
-	static const char decode_format[] = "{\"eid_str\":\"%[^,\"]\", \"mailbox\":%[^,\"]\", \"context\":\"%[^,\"]\", \"newmsgs\":%u, \"oldmsgs\":%u}";
-	char eid_str[32];
-	char mailbox[50];
-	char context[50];
-	unsigned int newmsgs;
-	unsigned int oldmsgs;
-	struct ast_event *event = *eventref;
-	
-	if (sscanf(msg, decode_format, eid_str, mailbox, context, &newmsgs, &oldmsgs)) {
-		ast_log(LOG_NOTICE, "Received: eid: %s, mailbox:%s, context:%s, newmsgs:%u, oldmsgs:%u\n", eid_str, mailbox, context, newmsgs, oldmsgs);
-		struct ast_eid eid;
-		ast_str_to_eid(&eid, eid_str);
-		if (!ast_eid_cmp(&ast_eid_default, &eid)) {
-			/* Don't feed events back in that originated locally. */
-			return EID_SELF;
-		}
-		if ((event = ast_event_new(AST_EVENT_MWI,
-				AST_EVENT_IE_MAILBOX, AST_EVENT_IE_PLTYPE_STR, mailbox,
-			        AST_EVENT_IE_CONTEXT, AST_EVENT_IE_PLTYPE_STR, context,
-			        AST_EVENT_IE_OLDMSGS, AST_EVENT_IE_PLTYPE_UINT, oldmsgs,
-			        AST_EVENT_IE_NEWMSGS, AST_EVENT_IE_PLTYPE_UINT, newmsgs,
-			        AST_EVENT_IE_EID, AST_EVENT_IE_PLTYPE_RAW, &eid, sizeof(eid),
-				AST_EVENT_IE_END))
-		) {
-			ast_log(LOG_NOTICE, "Sent devicestate to asterisk'\n");
-			*eventref = event;
-			return OK_CACHABLE;
-		} else {
-			ast_log(LOG_ERROR, "Could not create mwi ast_event'\n");
-		}
-	} else {
-		ast_log(LOG_ERROR, "res_redis, event received from redis could not be decoded: '%s'\n", msg);
-	}
-	return DECODING_ERROR;
-}
-
-/* generic encode */
-/*
-static int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_event *event) 
-{
-	struct ast_event_iterator i;
-	if (ast_event_iterator_init(&i, event)) {
-		ast_log(LOG_ERROR, "Failed to initialize event iterator.  :-(\n");
-		return 0;
-	}
-	ast_log(LOG_NOTICE, "Encoding Event: %s\n", ast_event_get_type_name(event));
-	
-	                                        
-	int ast_event_iterator_init(struct ast_event_iterator *iterator, const struct ast_event *event)
-	for 	
-}
-*/
-
-static int redis_encode_mwi2msg(char *msg, const size_t msg_len, const struct ast_event *event)
-{
-	static const char encode_format[] = "{\"eid_str\":\"%s\", \"mailbox\":\"%s\", \"context\":\"%s\", \"newmsgs\":%u, \"oldmsgs\":%u}";
-        char eid_str[32];
-
-        ast_eid_to_str(eid_str, sizeof(eid_str), &ast_eid_default);
-	snprintf(msg, msg_len, encode_format, 
-		eid_str, 
-		ast_event_get_ie_str(event, AST_EVENT_IE_MAILBOX),
-		ast_event_get_ie_str(event, AST_EVENT_IE_CONTEXT),
-		ast_event_get_ie_uint(event, AST_EVENT_IE_NEWMSGS),
-		ast_event_get_ie_uint(event, AST_EVENT_IE_OLDMSGS));
-
-	return 1;
-}
-
-static int redis_decode_msg2devicestate(struct ast_event **eventref, const char *msg)
-{
-	static const char decode_format[] = "{\"eid_str\":\"%[^,\"]\",\"device\":\"%[^,\"]\",\"state\":%u,\"statestr\":\"%[^,\"]\",\"cacheable\":%u}";
-	char eid_str[32];
-	char device[50];
-	unsigned int device_state;
-	char state_str[30];
-	unsigned int cachable;
-	struct ast_event *event = *eventref;
-	
-	if (sscanf(msg, decode_format, eid_str, device, &device_state, state_str, &cachable)) {
-		ast_log(LOG_NOTICE, "Received: eid: %s, device:%s, device_state:%u, cachable:%u\n", eid_str, device, device_state, cachable);
-		struct ast_eid eid;
-		ast_str_to_eid(&eid, eid_str);
-		if (!ast_eid_cmp(&ast_eid_default, &eid)) {
-			/* Don't feed events back in that originated locally. */
-			return EID_SELF;
-		}
-		if ((event = ast_event_new(AST_EVENT_DEVICE_STATE_CHANGE,
-				AST_EVENT_IE_DEVICE, AST_EVENT_IE_PLTYPE_STR, device, 
-				AST_EVENT_IE_STATE, AST_EVENT_IE_PLTYPE_UINT, device_state,
-			        AST_EVENT_IE_EID, AST_EVENT_IE_PLTYPE_RAW, &eid, sizeof(eid),
-				AST_EVENT_IE_CACHABLE, AST_EVENT_IE_PLTYPE_UINT, cachable,
-				AST_EVENT_IE_END))
-		) {
-/*
-			ast_log(LOG_NOTICE, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
-			ast_log(LOG_NOTICE, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
-			ast_log(LOG_NOTICE, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
-			char eid_str1[32];
-			const void *eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
-		        ast_eid_to_str(eid_str1, sizeof(eid_str1), (void *)eid);
-			ast_log(LOG_NOTICE, "event: eid:  '%s'\n", eid_str1);
-			char *tmp = ast_alloca(MAX_EVENT_LENGTH);
-			redis_encode_devicestate2msg(tmp, MAX_EVENT_LENGTH, event);
-			ast_log(LOG_NOTICE, "Check Decoded Event: '%s'\n", tmp);
-*/
-			*eventref = event;
-			return OK + cachable;
-		} else {
-			ast_log(LOG_ERROR, "Could not create Send devicestate to asterisk'\n");
-		}
-	} else {
-		ast_log(LOG_ERROR, "res_redis, event received from redis could not be decoded: '%s'\n", msg);
-	}
-	return DECODING_ERROR;
-}
-
-static int redis_encode_devicestate2msg(char *msg, const size_t msg_len, const struct ast_event *event)
-{
-	static const char encode_format[] = "{\"eid_str\":\"%s\",\"device\":\"%s\",\"state\":%u,\"statestr\":\"%s\",\"cacheable\":%u}";
-        char eid_str[32];
-
-        ast_eid_to_str(eid_str, sizeof(eid_str), &ast_eid_default);
-	snprintf(msg, msg_len, encode_format, 
-		eid_str, 
-		ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE), 
-		ast_event_get_ie_uint(event, AST_EVENT_IE_STATE), 
-		ast_devstate_str(ast_event_get_ie_uint(event, AST_EVENT_IE_STATE)), 
-		ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
-
-	return 1;
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) {
@@ -343,11 +198,11 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								return;
 							}
 
-							if ((res = etype->decode_msg2event(&event, msg))) {
+							if ((res = redis_decode_msg2event(&event, msg))) {
 								if (res == EID_SELF) {
 									// skip feeding back to self
 									// ast_log(LOG_NOTICE, "Originated Here. skip'\n");
-									ast_event_destroy(event);
+//									ast_event_destroy(event);
 									return;
 								} else {
 									/*
@@ -372,7 +227,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								}
 							} else {
 								ast_log(LOG_NOTICE, "error decoding %s'\n", msg);
-								ast_event_destroy(event);
+//								ast_event_destroy(event);
 							}
 						} else {
 							ast_log(LOG_NOTICE, "has different channelstr '%s'\n", etype->channelstr);
@@ -504,7 +359,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	
 	if (etype) {
 		if (etype->publish) {
-			if (etype->encode_event2msg(msg, MAX_EVENT_LENGTH, event)) {
+			if (redis_encode_event2msg(msg, MAX_EVENT_LENGTH, event)) {
 				ast_log(LOG_NOTICE, "sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
 //				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %s", etype->channelstr, msg);
 				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));

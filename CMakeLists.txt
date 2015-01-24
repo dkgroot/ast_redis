@@ -60,6 +60,8 @@ add_library(cdr_redis SHARED
 set_target_properties(cdr_redis PROPERTIES PREFIX "")
 add_library(res_redis SHARED
 	res_redis/res_redis.c
+	res_redis/ast_event_json.h
+	res_redis/ast_event_json.c
 )
 set_target_properties(res_redis PROPERTIES PREFIX "")
 add_library(res_config_redis SHARED
