@@ -1,7 +1,7 @@
 ## Welcome the Redis Plugin for Asterisk
 
 This project provides three modules to plugin to asterisk, namely:
-- res_redis (Working / Currently Work in progress)
+- res_redis (Working / Currently Work in progress / Asterisk-11 for now)
   provising distributed devstate between asterisk cluster nodes via redis Pub/Sub
 - cdr_redis (To Be Done)
   will provide posting of cdr events to a redis database
