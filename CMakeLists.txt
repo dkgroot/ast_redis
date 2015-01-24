@@ -13,6 +13,8 @@ SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 #-------------------------------------------------- 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules (HIREDIS REQUIRED hiredis)
+#INCLUDE_DIRECTORIES(${HIREDIS_INCLUDE_DIR})
+#LINK_DIRECTORIES(${HIREDIS_LIBRARYDIR})
 
 #--------------------------------------------------
 # LibEvent is required
@@ -25,21 +27,9 @@ pkg_check_modules (LIBEVENT REQUIRED libevent)
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules")
 FIND_PACKAGE(Asterisk REQUIRED)
 
-#include_directories(src/ ${ASTERISK_INCLUDE_DIR})
-#include_directories(/usr/include/ ${ASTERISK_INCLUDE_DIR} /usr/include/hiredis)
-include_directories(/usr/include/ ${ASTERISK_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
 
-#INCLUDE_DIRECTORIES(${HIREDIS_INCLUDE_DIR} ${ASTERISK_INCLUDE_DIR})
-#LINK_DIRECTORIES(${HIREDIS_LIBRARYDIR} ${ASTERISK_LIBRARY_DIR})
-
-#set(CMAKE_REQUIRED_INCLUDES ${HIREDIS_INCLUDEDIR} ${ASTERISK_INCLUDE_DIR})
-#set(LIBS ${LIBS} -I${HIREDIS_INCLUDEDIR} -L${HIREDIS_LIBRARIES})
-#set(LIBS ${LIBS} -lhiredis -levent)
-
-# MESSAGE(NOTICE "hiredis: '${HIREDIS_LIBRARYDIR}', '${HIREDIS_INCLUDE_DIR}', '${LIBS}', '${CMAKE_REQUIRED_INCLUDES}', '${LINK_DIRECTORIES}'")
-
-#LINK_DIRECTORIES(/usr/lib/x86_64-linux-gnu/libhiredis.so.0.10 ${ASTERISK_LIBRARY_DIR})
-
+#CONFIGURE_FILE ("${PROJECT_SOURCE_DIR}/include/config.h.in" "${PROJECT_BINARY_DIR}/config.h" )
 #--------------------------------------------------
 # Compile Sources
 #--------------------------------------------------
@@ -60,8 +50,8 @@ add_library(cdr_redis SHARED
 set_target_properties(cdr_redis PROPERTIES PREFIX "")
 add_library(res_redis SHARED
 	res_redis/res_redis.c
-	res_redis/ast_event_json.h
-	res_redis/ast_event_json.c
+	include/ast_event_json.h
+	lib/ast_event_json.c
 )
 set_target_properties(res_redis PROPERTIES PREFIX "")
 add_library(res_config_redis SHARED

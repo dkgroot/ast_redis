@@ -14,11 +14,12 @@
 #define AST_MODULE "res_redis"
 
 ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
-#include "asterisk/module.h"
-#include "asterisk/devicestate.h"
-#include "asterisk/event.h"
-#include "ast_event_json.h"
-#include "shared.h"
+#include <asterisk/module.h>
+#include <asterisk/devicestate.h>
+#include <asterisk/event.h>
+
+#include "../include/ast_event_json.h"
+#include "../include/shared.h"
 
 /* copied from asterisk/event.c */
 struct ast_event {  

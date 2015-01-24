@@ -32,17 +32,16 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <hiredis/async.h>
 #include <hiredis/adapters/libevent.h>
 
-#include "asterisk/module.h"
-#include "asterisk/logger.h"
-#include "asterisk/config.h"
-#include "asterisk/event.h"
-#include "asterisk/cli.h"
-#include "asterisk/netsock2.h"
-#include "asterisk/devicestate.h"
-#include "asterisk/event.h"
+#include <asterisk/module.h>
+#include <asterisk/logger.h>
+#include <asterisk/config.h>
+#include <asterisk/event.h>
+#include <asterisk/cli.h>
+#include <asterisk/netsock2.h>
+#include <asterisk/devicestate.h>
 
-#include "ast_event_json.h"
-#include "shared.h"
+#include "../include/ast_event_json.h"
+#include "../include/shared.h"
 
 /* globals */
 AST_RWLOCK_DEFINE_STATIC(event_types_lock);
