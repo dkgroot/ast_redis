@@ -26,11 +26,22 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include "../include/message_serializer.h"
 #include "../include/shared.h"
 
+/*
+ * declaration
+ */
+static void ast_event_cb(const struct ast_event *event, void *data);
+
+/*
+ * globals
+ */
+AST_RWLOCK_DEFINE_STATIC(event_map_lock);
+ 
+
 //typedef struct pbx_event_map {
 //	int ast_event_type;
 //	const char *name;
-//	struct stasis_subscription *handle;
-//	pbx_subscription_callback *callback;
+//	struct stasis_subscription *sub;
+//	pbx_subscription_callback_t *callback;
 //} pbx_event_map_t;
 static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
 	[PBX_EVENT_MWI] =                 {.ast_event_type = AST_EVENT_MWI, .name = "mwi"},
@@ -42,17 +53,35 @@ static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
 /*
  * public 
  */
-int pbx_subscribe(pbx_event_type_t event, pbx_subscription_callback *callback)
+int pbx_subscribe(pbx_event_type_t event_type, pbx_subscription_callback *callback)
 {
+/*	ast_rwlock_rdlock(&event_map_lock);
+	if (event_map[event_type].sub) {
+		pbx_unsubscribe(event_type);
+	} else {
+		event_map[event_type].callback = callback;
+		event_map[event_type].sub = ast_event_subscribe_new(event_map[event_type].ast_event_type, ast_event_cb, &event_type);
+	}
+	ast_rwlock_unlock(&event_map_lock);
+	return 0;*/
 	return -1;
 }
 
-int pbx_unsubscribe(pbx_event_type_t event)
+int pbx_unsubscribe(pbx_event_type_t event_type)
 {
+/*	ast_rwlock_rdlock(&event_map_lock);
+	if (!event_map[event_type].sub) {
+		// not subscribed error
+	} else {
+		event_map[event_type].sub = ast_event_unsubscribe((struct ast_event_sub *)event_map[event_type].sub);
+		event_map[event_type].callback = NULL;
+	}
+	ast_rwlock_unlock(&event_map_lock);
+	return 0;*/
 	return -1;
 }
 
-int pbx_publish(pbx_event_type_t event, char *jsonmsgbuffer, size_t buf_len)
+int pbx_publish(pbx_event_type_t event_type, char *jsonmsgbuffer, size_t buf_len)
 {
 	return -1;
 }
@@ -60,14 +89,18 @@ int pbx_publish(pbx_event_type_t event, char *jsonmsgbuffer, size_t buf_len)
 /*
  * private
  */
-int message2json(char *msg, const size_t msg_len, const struct ast_event *event) 
-{
-	return -1;
-}
-
-int json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
-{
-	return -1;
+static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg);
+	pbx_event_type_t event_type = (pbx_event_type_t)data;
+/*	char *jsonbuffer = NULL;
+	if (!(jsonbuffer = malloc(MAX_JSON_BUFFERLEN))) {
+		// malloc error
+	}
+	if (message2json(jsonbuffer, MAX_JSON_BUFFERLEN, event)) {
+		event_map[event_type].callback(event_type, jsonbuffer);
+	} else {
+		// error
+	}
+	ast_free(jsonbuffer);*/
 }
 
 #endif

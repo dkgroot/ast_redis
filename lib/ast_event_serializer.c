@@ -36,7 +36,6 @@ AST_RWLOCK_DEFINE_STATIC(event_map_lock);
 //typedef struct pbx_event_map {
 //	int ast_event_type;
 //	const char *name;
-////	struct stasis_subscription *sub;
 //	struct ast_event_sub *sub;
 //	pbx_subscription_callback_t callback;
 //} pbx_event_map_t;
@@ -50,20 +49,6 @@ static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
 /*
  * public
  */
-//static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg);
-static void ast_event_cb(const struct ast_event *event, void *data) {
-	pbx_event_type_t event_type = (pbx_event_type_t)data;
-	char *jsonbuffer = NULL;
-	if (!(jsonbuffer = malloc(MAX_JSON_BUFFERLEN))) {
-		// malloc error
-	}
-	if (message2json(jsonbuffer, MAX_JSON_BUFFERLEN, event)) {
-		event_map[event_type].callback(event_type, jsonbuffer);
-	} else {
-		// error
-	}
-	ast_free(jsonbuffer);
-}
 
 /* public */
 int pbx_subscribe(pbx_event_type_t event_type, pbx_subscription_callback_t callback)
@@ -100,6 +85,20 @@ int pbx_publish(pbx_event_type_t event_type, char *jsonmsgbuffer, size_t buf_len
 /*
  * private 
  */
+static void ast_event_cb(const struct ast_event *event, void *data) {
+	pbx_event_type_t event_type = (pbx_event_type_t)data;
+	char *jsonbuffer = NULL;
+	if (!(jsonbuffer = malloc(MAX_JSON_BUFFERLEN))) {
+		// malloc error
+	}
+	if (message2json(jsonbuffer, MAX_JSON_BUFFERLEN, event)) {
+		event_map[event_type].callback(event_type, jsonbuffer);
+	} else {
+		// error
+	}
+	ast_free(jsonbuffer);
+}
+
 /* copied from asterisk/event.c */
 struct ast_event {  
         /*! Event type */ 
