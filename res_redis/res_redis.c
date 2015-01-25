@@ -163,17 +163,21 @@ static int redis_connect_nextserver()
 void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	if (reply == NULL) {
-		return;
+		goto cleanup;
 	}
 	AST_LOG_NOTICE_DEBUG("Pong\n");
+cleanup:
+	freeReplyObject(reply);
 }
 
 void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	if (reply == NULL) {
-		return;
+		goto cleanup;
 	}
 	AST_LOG_NOTICE_DEBUG("Meet\n");
+cleanup:
+	freeReplyObject(reply);
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
@@ -182,7 +186,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 	enum ast_event_type event_type;
 	redisReply *reply = r;
 	if (reply == NULL) {
-		return;
+		goto cleanup;
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
@@ -217,13 +221,13 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								
 								if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
-									return;
+									goto cleanup;
 								}
 								if ((res = redis_decode_msg2event(&event, event_type, msg))) {
 									if (res == EID_SELF) {
 										// skip feeding back to self
 										ast_debug(1, "Originated Here. skip'\n");
-										return;
+										goto cleanup;
 									} else {
 										/*
 										// check decoding
@@ -275,9 +279,11 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 			for (j = 0; j < reply->elements; j++) {
 				ast_debug(1, "REDIS_SUBSCRIPTION_CB: [%u]: %s\n", j, reply->element[j]->str);
 			}
-		}
+		}		
 	}
 #endif
+cleanup:
+	freeReplyObject(reply);
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
