@@ -37,7 +37,8 @@ typedef struct pbx_event_map {
 	int ast_event_type;
 	const char *name;
 	//struct stasis_subscription *sub;
-	struct ast_event_sub *sub;
+	//struct ast_event_sub *sub;
+	void *sub;
 	pbx_subscription_callback_t callback;
 } pbx_event_map_t;
 

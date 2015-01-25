@@ -85,7 +85,7 @@ int pbx_unsubscribe(pbx_event_type_t event_type)
 	if (!event_map[event_type].sub) {
 		// not subscribed error
 	} else {
-		event_map[event_type].sub = ast_event_unsubscribe(event_map[event_type].sub);
+		event_map[event_type].sub = ast_event_unsubscribe((struct ast_event_sub *)event_map[event_type].sub);
 		event_map[event_type].callback = NULL;
 	}
 	ast_rwlock_unlock(&event_map_lock);
