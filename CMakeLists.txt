@@ -7,14 +7,12 @@ cmake_minimum_required(VERSION 2.8)
 SET(CMAKE_BUILD_TYPE "Debug")
 SET(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Werror")
 SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
+find_package(PkgConfig REQUIRED)
 
 #--------------------------------------------------
 # HiRedis is required
 #-------------------------------------------------- 
-find_package(PkgConfig REQUIRED)
 pkg_check_modules (HIREDIS REQUIRED hiredis)
-#INCLUDE_DIRECTORIES(${HIREDIS_INCLUDE_DIR})
-#LINK_DIRECTORIES(${HIREDIS_LIBRARYDIR})
 
 #--------------------------------------------------
 # LibEvent is required
@@ -36,11 +34,11 @@ INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
 
 # Static library location for now (Needs Fixing)....
 add_library(hiredis STATIC IMPORTED)
-set_property(TARGET hiredis PROPERTY IMPORTED_LOCATION /usr/lib/x86_64-linux-gnu/libhiredis.so)
+set_property(TARGET hiredis PROPERTY IMPORTED_LOCATION -lhiredis)
 add_library(pthread STATIC IMPORTED)
-set_property(TARGET pthread PROPERTY IMPORTED_LOCATION /lib/x86_64-linux-gnu/libpthread.so.0)
+set_property(TARGET pthread PROPERTY IMPORTED_LOCATION -lpthread)
 add_library(libevent STATIC IMPORTED)
-set_property(TARGET libevent PROPERTY IMPORTED_LOCATION /usr/lib/x86_64-linux-gnu/libevent.so)
+set_property(TARGET libevent PROPERTY IMPORTED_LOCATION -levent)
 
 add_library(cdr_redis SHARED
 	cdr_redis/cdr_redis.c
