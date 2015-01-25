@@ -208,6 +208,9 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 					
 						if (etype->publish) {
 							if (!strcasecmp(reply->element[1]->str, etype->channelstr)) {
+#ifdef HAVE_PBX_STASIS_H
+									
+#else
 								struct ast_event *event = NULL;
 								char *msg = ast_strdupa(reply->element[2]->str);
 								unsigned int res = 0;
@@ -216,7 +219,6 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
 									return;
 								}
-
 								if ((res = redis_decode_msg2event(&event, event_type, msg))) {
 									if (res == EID_SELF) {
 										// skip feeding back to self
@@ -254,6 +256,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								} else {
 									ast_log(LOG_ERROR, "error decoding %s'\n", msg);
 								}
+#endif
 							} else {
 								ast_debug(1, "has different channelstr '%s'\n", etype->channelstr);
 							}
@@ -316,10 +319,14 @@ static void redis_dump_ast_event_cache()
 
 			ast_debug(1, "subscribe %s\n", event_types[i].name);
 #ifdef HAVE_PBX_STASIS_H
-			//struct stasis_subscription *event_sub;
-			//struct stasis_topic *devstate_specific_topic = ast_device_state_topic(NULL);
-			//event_sub = stasis_subscribe(devstate_specific_topic, ast_event_cb, NULL);
-			//ast_event_append_eid(event_sub, AST_EVENT_IE_EID, &ast_eid_default);
+			struct stasis_subscription *event_sub;
+			event_sub = stasis_subscribe(ast_device_state_topic_all(), ast_event_cb, NULL);
+			usleep(500);
+			ast_debug(1, "Dumping Past %s Events\n", event_types[i].name);
+			stasis_cache_dump(ast_device_state_cache(), NULL);
+//			stasis_cache_dump_by_eid();
+			stasis_unsubscribe(event_sub)
+			//destroy ? 
 #else
 			struct ast_event_sub *event_sub;
 			event_sub = ast_event_subscribe_new(i, ast_event_cb, NULL);
@@ -341,9 +348,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 #endif
 {
 	ast_debug(1, "ast_event_cb\n");
-#ifdef HAVE_PBX_STASIS_H
-#else
-
+#ifndef HAVE_PBX_STASIS_H
 	const struct ast_eid *eid;
 	char eid_str[32] = "";
 	eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
@@ -379,6 +384,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 		return;
 	}
 	AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event from EID: '%s'\n", eid_str);
+#endif	
 	
 	// decode event2msg
 	ast_debug(1, "(ast_event_cb) decode incoming message\n");
@@ -394,7 +400,16 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	
 	if (etype) {
 		if (etype->publish) {
+
+#ifdef HAVE_PBX_STASIS_H
+			const struct ast_eid *eid;
+			char eid_str[32] = "";
+
+			struct ast_json *
+			if ((msg = stasis_message_to_json(smsg, NULL))) {
+#else
 			if (redis_encode_event2msg(msg, MAX_EVENT_LENGTH, event)) {
+#endif
 				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
 				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
 				if (redisPubConn->err) {
@@ -409,7 +424,6 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	} else {
 		ast_log(LOG_ERROR, "event_type does not exist'\n");
 	}
-#endif
 }
 
 static int set_event(const char *event_type, int pubsub, char *str)
@@ -717,8 +731,7 @@ static int load_module(void)
 		}
 		if (event_types[i].publish && !event_types[i].sub) {
 #ifdef HAVE_PBX_STASIS_H
-			struct stasis_topic *devstate_specific_topic = ast_device_state_topic(NULL);
-			event_types[i].sub = stasis_subscribe(devstate_specific_topic, ast_event_cb, NULL);
+			event_types[i].sub = stasis_subscribe(ast_device_state_topic_all(), ast_event_cb, NULL);
 #else
 			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
 #endif
