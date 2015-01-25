@@ -167,7 +167,8 @@ void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	}
 	AST_LOG_NOTICE_DEBUG("Pong\n");
 cleanup:
-	freeReplyObject(reply);
+//	freeReplyObject(reply);
+	AST_LOG_NOTICE_DEBUG("Return from CB\n");
 }
 
 void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
@@ -177,7 +178,8 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	}
 	AST_LOG_NOTICE_DEBUG("Meet\n");
 cleanup:
-	freeReplyObject(reply);
+//	freeReplyObject(reply);
+	AST_LOG_NOTICE_DEBUG("Return from CB\n");
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
@@ -283,7 +285,8 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 	}
 #endif
 cleanup:
-	freeReplyObject(reply);
+//	freeReplyObject(reply);
+	AST_LOG_NOTICE_DEBUG("Return from CB\n");
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
