@@ -12,9 +12,7 @@
 #ifndef _AST_EVENT_JSON_HEADER_GUARD_H_
 #define _AST_EVENT_JSON_HEADER_GUARD_H_
 
-#ifndef HAVE_PBX_STASIS_H
-int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_event *event);
-int redis_decode_msg2event(struct ast_event **eventref, enum ast_event_type event_type, const char *msg);
-#endif /* HAVE_PBX_STASIS_H */
+int message2json(char *msg, const size_t msg_len, const struct ast_event *event);
+int json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg);
 
 #endif /* _AST_EVENT_JSON_HEADER_GUARD_H_ */

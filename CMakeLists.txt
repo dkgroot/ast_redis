@@ -44,8 +44,8 @@ add_library(cdr_redis SHARED
 set_target_properties(cdr_redis PROPERTIES PREFIX "")
 add_library(res_redis SHARED
 	res_redis/res_redis.c
-	include/ast_event_json.h
-	lib/ast_event_json.c
+	include/message_serializer.h
+	lib/@EVENT_SERIALIZER@
 )
 set_target_properties(res_redis PROPERTIES PREFIX "")
 add_library(res_config_redis SHARED

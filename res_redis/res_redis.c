@@ -44,7 +44,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/stasis.h>
 #endif
 
-#include "../include/ast_event_json.h"
+#include "../include/message_serializer.h"
 #include "../include/shared.h"
 
 /* globals */
@@ -225,7 +225,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
 									goto cleanup;
 								}
-								if ((res = redis_decode_msg2event(&event, event_type, msg))) {
+								if ((res = json2message(&event, event_type, msg))) {
 									if (res == EID_SELF) {
 										// skip feeding back to self
 										ast_debug(1, "Originated Here. skip'\n");
@@ -417,7 +417,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 			struct ast_json *
 			if ((msg = stasis_message_to_json(smsg, NULL))) {
 #else
-			if (redis_encode_event2msg(msg, MAX_EVENT_LENGTH, event)) {
+			if (message2json(msg, MAX_EVENT_LENGTH, event)) {
 #endif
 				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
 				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));

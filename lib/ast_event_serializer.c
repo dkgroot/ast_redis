@@ -11,8 +11,6 @@
  */
 #include "config.h"
 
-#ifndef HAVE_PBX_STASIS_H
-
 #include <asterisk.h>
 
 #define AST_MODULE "res_redis"
@@ -22,7 +20,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/devicestate.h>
 #include <asterisk/event.h>
 
-#include "../include/ast_event_json.h"
+#include "../include/message_serializer.h"
 #include "../include/shared.h"
 
 /* copied from asterisk/event.c */
@@ -134,7 +132,7 @@ inline static void trim_char_bothends(char *inout, char chr)
 }
 
 /* generic ast_event to json encode */
-int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_event *event) 
+int message2json(char *msg, const size_t msg_len, const struct ast_event *event) 
 {
 	unsigned int curpos = 1;
 	memset(msg, 0, msg_len);
@@ -196,7 +194,7 @@ int redis_encode_event2msg(char *msg, const size_t msg_len, const struct ast_eve
 }
 
 /* generic json to ast_event decoder */
-int redis_decode_msg2event(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
+int json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
 {
 	int res = DECODING_ERROR;
 	struct ast_event *event = *eventref;
@@ -289,4 +287,3 @@ failed:
 	ast_event_destroy(event);
 	return res;
 }
-#endif /* HAVE_PBX_STASIS_H */
