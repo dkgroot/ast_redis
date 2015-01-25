@@ -10,12 +10,18 @@ SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 find_package(PkgConfig REQUIRED)
 
 #--------------------------------------------------
+# PThread is required
+#-------------------------------------------------- 
+find_package (Threads)
+
+#--------------------------------------------------
 # HiRedis is required
 #-------------------------------------------------- 
 pkg_check_modules (HIREDIS REQUIRED hiredis)
 
 #--------------------------------------------------
 # LibEvent is required
+
 #-------------------------------------------------- 
 pkg_check_modules (LIBEVENT REQUIRED libevent)
 
@@ -32,14 +38,6 @@ INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
 
 # Config files
 
-# Static library location for now (Needs Fixing)....
-add_library(hiredis STATIC IMPORTED)
-set_property(TARGET hiredis PROPERTY IMPORTED_LOCATION -lhiredis)
-add_library(pthread STATIC IMPORTED)
-set_property(TARGET pthread PROPERTY IMPORTED_LOCATION -lpthread)
-add_library(libevent STATIC IMPORTED)
-set_property(TARGET libevent PROPERTY IMPORTED_LOCATION -levent)
-
 add_library(cdr_redis SHARED
 	cdr_redis/cdr_redis.c
 )
@@ -54,8 +52,8 @@ add_library(res_config_redis SHARED
 	res_config_redis/res_config_redis.c
 )
 set_target_properties(res_config_redis PROPERTIES PREFIX "")
-target_link_libraries(res_config_redis hiredis pthread)
-target_link_libraries(res_redis hiredis pthread libevent)
+target_link_libraries(res_config_redis -l@HIREDIS_LIBRARIES@ ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(res_redis -l@HIREDIS_LIBRARIES@ -l@LIBEVENT_LIBRARIES@ ${CMAKE_THREAD_LIBS_INIT})
 
 #--------------------------------------------------
 # Install
