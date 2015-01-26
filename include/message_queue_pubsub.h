@@ -12,7 +12,7 @@
 #ifndef _MESSAGE_QUEUE_PUBSUB_H_
 #define _MESSAGE_QUEUE_PUBSUB_H_
 
-#include <stdlib.h>
+//#include <stdlib.h>
 #include "../include/shared.h"
 
 /* 
@@ -32,13 +32,15 @@ typedef struct msq_event_channel_map msq_event_channel_t;
 /*
  * public
  */
-exception_t addserver(char *url, int port, char *socket);
-exception_t removeserver(char *url, int port, char *socket);
-exception_t connect_to_next_server();
-exception_t disconnect();
+exception_t msq_add_server(const char *url, int port, const char *socket);
+exception_t msq_list_servers();
+exception_t msq_remove_all_servers();
+exception_t msq_remove_server(const char *url, int port, const char *socket);
+exception_t msq_connect_to_next_server();
+exception_t msq_disconnect();
 
-exception_t publish(event_type_t channel, char *publishmsg);
-exception_t subscribe(event_type_t channel, msq_subscription_callback_t callback);
+exception_t msq_publish(event_type_t channel, char *publishmsg);
+exception_t msq_subscribe(event_type_t channel, msq_subscription_callback_t callback);
 //send_command(...)
 
 #endif /* _MESSAGE_QUEUE_PUBSUB_H_ */

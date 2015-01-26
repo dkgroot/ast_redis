@@ -38,12 +38,24 @@ FIND_PACKAGE(Asterisk REQUIRED)
 #--------------------------------------------------
 INCLUDE_DIRECTORIES(/usr/include/ ${PROJECT_BINARY_DIR})
 
-# Config files
-
+#
+# CDR_REDIS
+#
 add_library(cdr_redis SHARED
 	cdr_redis/cdr_redis.c
 )
 set_target_properties(cdr_redis PROPERTIES PREFIX "")
+
+#
+# RES_CONFIG_REDIS
+#
+add_library(res_config_redis SHARED
+	res_config_redis/res_config_redis.c
+)
+
+#
+# RES_REDIS
+#
 add_library(res_redis SHARED
 #	include/shared.h
 #	include/message_queue_pubsub.h
@@ -53,17 +65,31 @@ add_library(res_redis SHARED
 	res_redis/res_redis.c
 )
 set_target_properties(res_redis PROPERTIES PREFIX "")
-add_library(res_config_redis SHARED
-	res_config_redis/res_config_redis.c
+
+#
+# RES_REDIS_v1
+#
+add_library(res_redis_v1 SHARED
+	include/shared.h
+	include/message_queue_pubsub.h
+	include/pbx_event_message_serializer.h
+	lib/msq_redis.c
+	@PBX_EVENT_SERIALIZER@
+	res_redis/res_redis_v1.c
 )
+set_target_properties(res_redis_v1 PROPERTIES PREFIX "")
+
 set_target_properties(res_config_redis PROPERTIES PREFIX "")
 target_link_libraries(res_config_redis -l@HIREDIS_LIBRARIES@ ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(res_redis -l@HIREDIS_LIBRARIES@ -l@LIBEVENT_LIBRARIES@ ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(res_redis_v1 -l@HIREDIS_LIBRARIES@ -l@LIBEVENT_LIBRARIES@ ${CMAKE_THREAD_LIBS_INIT})
 
 #--------------------------------------------------
 # Install
 #--------------------------------------------------
-install(TARGETS cdr_redis DESTINATION ${ASTERISK_LIBRARY_DIR})
-install(TARGETS res_redis DESTINATION ${ASTERISK_LIBRARY_DIR})
-install(TARGETS res_config_redis DESTINATION ${ASTERISK_LIBRARY_DIR})
-install(FILES conf/res_redis.conf DESTINATION asterisk-11-branch/etc/asterisk/ COMPONENT config)
+install(TARGETS cdr_redis DESTINATION ${ASTERISK_MOD_DIR})
+install(TARGETS res_redis DESTINATION ${ASTERISK_MOD_DIR})
+install(TARGETS res_redis_v1 DESTINATION ${ASTERISK_MOD_DIR})
+install(TARGETS res_config_redis DESTINATION ${ASTERISK_MOD_DIR})
+install(FILES conf/res_redis.conf DESTINATION ${ASTERISK_ETC_DIR}/ COMPONENT config)
+install(FILES conf/res_redis_v1.conf DESTINATION ${ASTERISK_ETC_DIR}/ COMPONENT config)

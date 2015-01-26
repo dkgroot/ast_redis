@@ -13,7 +13,7 @@ if (ASTERISK_FOUND)
 else (ASTERISK_FOUND)
 	find_path(ASTERISK_INCLUDE_DIR asterisk.h
 	HINTS
-	  PATH_SUFFIXES 
+	  PATH_SUFFIXES
 	PATHS
 	  /usr/include
 	  ~/Library/Frameworks
@@ -75,6 +75,13 @@ if(NOT HAVE_PBX_AST_VERSION_H AND NOT HAVE_PBX_VERSION_H)
 	MESSAGE(FATAL_ERROR "Build will fail, asterisk version was not found")
 	RETURN()
 endif()
+
+IF(IS_DIRECTORY ${ASTERISK_LIBRARY_DIR}/../etc/asterisk/)
+	SET(ASTERISK_ETC_DIR ${ASTERISK_LIBRARY_DIR}/../etc/asterisk/)
+else(IS_DIRECTORY ${ASTERISK_LIBRARY_DIR}/../etc/asterisk/)
+	SET(ASTERISK_ETC_DIR /etc/asterisk)
+endif()
+SET(ASTERISK_MOD_DIR ${ASTERISK_LIBRARY_DIR}/asterisk/modules/)
 
 MESSAGE("-- Set ASTERISK_INCLUDE_DIR = ${ASTERISK_INCLUDE_DIR}")
 MESSAGE("-- Set ASTERISK_LIBRARY_DIR = ${ASTERISK_LIBRARY_DIR}")

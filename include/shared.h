@@ -65,17 +65,10 @@ typedef enum event_type {
 } event_type_t;
 
 /* pipe logging back to asterisk */
-void _log_console(int level, const char *file, int line, const char *function, const char *fmt, ...) __attribute__((format(printf, 5, 6)));
-void _log_debug(int level, const char *file, int line, const char *function, const char *fmt, ...) __attribute__((format(printf, 5, 6)));
 void _log_verbose(int level, const char *file, int line, const char *function, const char *fmt, ...) __attribute__((format(printf, 5, 6)));
 
-#define log_console(...) _log_console(2 /*LOG_NOTICE*/, __FILE__, __LINE__, __PRETTY_FUNCTION__, __VA_ARGS__)
-#define log_error_console(...) _log_console(4 /*LOG_ERROR*/, __FILE__, __LINE__, __PRETTY_FUNCTION__, __VA_ARGS__)
-#define log_debug(_level, ...) _log_debug(_level, __FILE__, __LINE__, __PRETTY_FUNCTION__, __VA_ARGS__)
+#define log_debug(...) _log_verbose(4, __FILE__, __LINE__, __PRETTY_FUNCTION__, __VA_ARGS__)
 #define log_verbose(_level, ...) _log_verbose(_level, __FILE__, __LINE__, __PRETTY_FUNCTION__, __VA_ARGS__)
-
-#define LOG_NOTICE_DEBUG(...) {log_console(__VA_ARGS__);log_debug(1, __VA_ARGS__);}
-#define LOG_ERROR_DEBUG(...) {log_error_console(__VA_ARGS__);log_debug(1, __VA_ARGS__);}
 /* end logging */
 
 /* */

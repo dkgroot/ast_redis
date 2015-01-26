@@ -165,34 +165,27 @@ static int redis_connect_nextserver()
 void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	if (reply == NULL) {
-		goto cleanup;
+		return;
 	}
 	AST_LOG_NOTICE_DEBUG("Pong\n");
-cleanup:
-//	freeReplyObject(reply);
-	AST_LOG_NOTICE_DEBUG("Return from CB\n");
 }
 
 void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	if (reply == NULL) {
-		goto cleanup;
+		return;
 	}
 	AST_LOG_NOTICE_DEBUG("Meet\n");
-cleanup:
-//	freeReplyObject(reply);
-	AST_LOG_NOTICE_DEBUG("Return from CB\n");
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
 {
-	 exception_t res = GENERAL_EXCEPTION;
-	log_verbose(2, "res_redis: Enter (%s)\n", __PRETTY_FUNCTION__);
+//	log_debug("res_redis: Enter (%s)\n", __PRETTY_FUNCTION__);
 #ifndef HAVE_PBX_STASIS_H
 	enum ast_event_type event_type;
 	redisReply *reply = r;
 	if (reply == NULL) {
-		goto cleanup;
+		return;
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
@@ -227,13 +220,13 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								
 								if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
-									goto cleanup;
+									return;
 								}
 								if ((res = json2message(&event, event_type, msg))) {
 									if (res == EID_SELF) {
 										// skip feeding back to self
-										ast_debug(1, "Originated Here. skip'\n");
-										goto cleanup;
+										ast_debug(1, "Originated Here. skip (Exception: %s)'\n", exception2str[res].str);
+										return;
 									} else {
 										/*
 										// check decoding
@@ -289,10 +282,6 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 		}		
 	}
 #endif
-cleanup:
-//	freeReplyObject(reply);
-	AST_LOG_NOTICE_DEBUG("Return from CB\n");
-	log_verbose(2, "ast_redis: Exit %s%s\n", res ? ", Exception Occured: " : "", res ? exception2str[res].str : "");
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
@@ -832,25 +821,15 @@ failed:
 	return res;
 }
 
-void _log_console(int level, const char *file, int line, const char *function, const char *fmt, ...)
-{
-        va_list ap;
-        va_start(ap, fmt);
-	ast_log(level, file, line, function, fmt, ap);
-	va_end(ap);
-}
-void _log_debug(int level, const char *file, int line, const char *function, const char *fmt, ...)
-{
-        va_list ap;
-        va_start(ap, fmt);
-	ast_debug(level, file, line, function, fmt, ap);
-	va_end(ap);
-}
 void _log_verbose(int level, const char *file, int line, const char *function, const char *fmt, ...)
 {
         va_list ap;
         va_start(ap, fmt);
-	__ast_verbose(file, line, function, level, fmt, ap);
+	if (level >= 4) {
+		__ast_verbose_ap(file, line, function, level, NULL, fmt, ap);
+	} else {
+		__ast_verbose_ap(file, line, function, level, NULL, fmt, ap);
+	}
 	va_end(ap);
 }
 
