@@ -41,6 +41,9 @@ exception_t msq_disconnect();
 
 exception_t msq_publish(event_type_t channel, char *publishmsg);
 exception_t msq_subscribe(event_type_t channel, msq_subscription_callback_t callback);
+
+exception_t msq_start_eventloop();
+exception_t msq_stop_eventloop();
 //send_command(...)
 
 #endif /* _MESSAGE_QUEUE_PUBSUB_H_ */
