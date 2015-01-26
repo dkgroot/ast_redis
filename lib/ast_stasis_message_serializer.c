@@ -23,7 +23,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/event_defs.h>
 #include <asterisk/stasis.h>
 
-#include "../include/message_serializer.h"
+#include "../include/pbx_event_message_serializer.h"
 #include "../include/shared.h"
 
 /*
@@ -35,25 +35,24 @@ static void ast_event_cb(const struct ast_event *event, void *data);
  * globals
  */
 AST_RWLOCK_DEFINE_STATIC(event_map_lock);
- 
 
-//typedef struct pbx_event_map {
-//	int ast_event_type;
-//	const char *name;
-//	struct stasis_subscription *sub;
-//	pbx_subscription_callback_t *callback;
-//} pbx_event_map_t;
+struct pbx_event_map {
+	int ast_event_type;
+	const char *name;
+	struct stasis_subscription *sub;
+	pbx_subscription_callback_t *callback;
+};
 static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
-	[PBX_EVENT_MWI] =                 {.ast_event_type = AST_EVENT_MWI, .name = "mwi"},
-	[PBX_EVENT_DEVICE_STATE_CHANGE] = {.ast_event_type = AST_EVENT_DEVICE_STATE_CHANGE, .name = "device_state_change"},
-	[PBX_EVENT_DEVICE_STATE] =        {.ast_event_type = AST_EVENT_DEVICE_STATE, .name = "device_state"},
-	[PBX_EVENT_PING] =                {.ast_event_type = AST_EVENT_PING, .name = "ping"},
+	[EVENT_MWI] =                 {.ast_event_type = AST_EVENT_MWI, .name = "mwi"},
+	[EVENT_DEVICE_STATE_CHANGE] = {.ast_event_type = AST_EVENT_DEVICE_STATE_CHANGE, .name = "device_state_change"},
+	[EVENT_DEVICE_STATE] =        {.ast_event_type = AST_EVENT_DEVICE_STATE, .name = "device_state"},
+	[EVENT_PING] =                {.ast_event_type = AST_EVENT_PING, .name = "ping"},
 };
 
 /*
  * public 
  */
-int pbx_subscribe(pbx_event_type_t event_type, pbx_subscription_callback *callback)
+int pbx_subscribe(event_type_t event_type, pbx_subscription_callback *callback)
 {
 /*	ast_rwlock_rdlock(&event_map_lock);
 	if (event_map[event_type].sub) {
@@ -67,7 +66,7 @@ int pbx_subscribe(pbx_event_type_t event_type, pbx_subscription_callback *callba
 	return -1;
 }
 
-int pbx_unsubscribe(pbx_event_type_t event_type)
+int pbx_unsubscribe(event_type_t event_type)
 {
 /*	ast_rwlock_rdlock(&event_map_lock);
 	if (!event_map[event_type].sub) {
@@ -81,7 +80,7 @@ int pbx_unsubscribe(pbx_event_type_t event_type)
 	return -1;
 }
 
-int pbx_publish(pbx_event_type_t event_type, char *jsonmsgbuffer, size_t buf_len)
+int pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf_len)
 {
 	return -1;
 }
@@ -90,7 +89,7 @@ int pbx_publish(pbx_event_type_t event_type, char *jsonmsgbuffer, size_t buf_len
  * private
  */
 static void ast_event_cb(void *userdata, struct stasis_subscription *sub, struct stasis_message *smsg);
-	pbx_event_type_t event_type = (pbx_event_type_t)data;
+	event_type_t event_type = (event_type_t)data;
 /*	char *jsonbuffer = NULL;
 	if (!(jsonbuffer = malloc(MAX_JSON_BUFFERLEN))) {
 		// malloc error

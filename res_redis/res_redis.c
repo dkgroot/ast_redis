@@ -44,7 +44,9 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/stasis.h>
 #endif
 
-#include "../include/message_serializer.h"
+#define AST_LOG_NOTICE_DEBUG(...) {ast_log(LOG_NOTICE, __VA_ARGS__);ast_debug(1, __VA_ARGS__);}
+
+#include "../include/pbx_event_message_serializer.h"
 #include "../include/shared.h"
 
 /* globals */
@@ -71,7 +73,7 @@ static void ast_event_cb(const struct ast_event *event, void *data);
 static void redis_dump_ast_event_cache();
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
 
-static struct event_type {
+static struct loc_event_type {
 	const char *name;
 #ifdef HAVE_PBX_STASIS_H
 	struct stasis_subscription *sub;
@@ -184,6 +186,8 @@ cleanup:
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
 {
+	 exception_t res = GENERAL_EXCEPTION;
+	log_verbose(2, "res_redis: Enter (%s)\n", __PRETTY_FUNCTION__);
 #ifndef HAVE_PBX_STASIS_H
 	enum ast_event_type event_type;
 	redisReply *reply = r;
@@ -192,7 +196,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
-			struct event_type *etype;
+			struct loc_event_type *etype;
 			if (!ast_strlen_zero(reply->element[1]->str)) {
 				for (event_type = 0; event_type < ARRAY_LEN(event_types); event_type++) {
 					ast_rwlock_rdlock(&event_types_lock);
@@ -258,6 +262,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 #endif
 										}
 										ast_debug(1, "ast_event sent'\n");
+										res = NO_EXCEPTION;
 									}
 								} else {
 									ast_log(LOG_ERROR, "error decoding %s'\n", msg);
@@ -287,6 +292,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 cleanup:
 //	freeReplyObject(reply);
 	AST_LOG_NOTICE_DEBUG("Return from CB\n");
+	log_verbose(2, "ast_redis: Exit %s%s\n", res ? ", Exception Occured: " : "", res ? exception2str[res].str : "");
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
@@ -397,7 +403,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	
 	// decode event2msg
 	ast_debug(1, "(ast_event_cb) decode incoming message\n");
-	struct event_type *etype;
+	struct loc_event_type *etype;
 	char *msg = ast_alloca(MAX_EVENT_LENGTH + 1);
 	if (!msg) {
 		return /* MALLOC_ERROR */;
@@ -824,6 +830,28 @@ failed:
 	cleanup_module();
 */
 	return res;
+}
+
+void _log_console(int level, const char *file, int line, const char *function, const char *fmt, ...)
+{
+        va_list ap;
+        va_start(ap, fmt);
+	ast_log(level, file, line, function, fmt, ap);
+	va_end(ap);
+}
+void _log_debug(int level, const char *file, int line, const char *function, const char *fmt, ...)
+{
+        va_list ap;
+        va_start(ap, fmt);
+	ast_debug(level, file, line, function, fmt, ap);
+	va_end(ap);
+}
+void _log_verbose(int level, const char *file, int line, const char *function, const char *fmt, ...)
+{
+        va_list ap;
+        va_start(ap, fmt);
+	__ast_verbose(file, line, function, level, fmt, ap);
+	va_end(ap);
 }
 
 
