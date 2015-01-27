@@ -1,5 +1,7 @@
 ## Welcome the Redis Plugin for Asterisk
 
+Travis Continues Integration Status: [![Travis](http://img.shields.io/travis/dkgroot/res_redis.svg?style=flat)](https://travis-ci.org/dkgroot/res_redis)
+
 This project provides three modules to plugin to asterisk, namely:
 - res_redis (Working / Currently Work in progress / Asterisk-11 for now)
   provising distributed devstate between asterisk cluster nodes via redis Pub/Sub
@@ -11,7 +13,7 @@ This project provides three modules to plugin to asterisk, namely:
 ### Prerequisites
 - cmake
 - libevent
-- hiredis
+- hiredis >= 0.11
 
 ### Configuring
 checkout the github repository

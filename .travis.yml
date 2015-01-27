@@ -1,0 +1,39 @@
+language: c
+
+# Setup Build Matrix
+compiler: 
+ - clang
+ - gcc
+env:
+# - REPOS=lucid
+# - REPOS=precise
+# - REPOS=trusty
+ - REPOS=utopic
+# - REPOS=vivid
+
+# Prepare Configure Script
+before_script:
+ - mkdir build
+ - cd build
+ - cmake ..
+
+# Install Required Devel Packages
+before_install:
+ - echo "deb http://archive.ubuntu.com/ubuntu ${REPOS} main restricted universe multiverse"            | sudo tee -a /etc/apt/sources.list.d/trusty.list
+ - echo "deb http://archive.ubuntu.com/ubuntu ${REPOS}-updates main restricted universe multiverse"    | sudo tee -a /etc/apt/sources.list.d/trusty.list
+ - echo "deb http://security.ubuntu.com/ubuntu/ ${REPOS}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/trusty.list
+ - echo "deb http://archive.canonical.com/ubuntu/ ${REPOS} partner"                                    | sudo tee -a /etc/apt/sources.list.d/trusty.list
+ - sudo apt-get update -qq
+ - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libevent libhiredis-dev redis-server redis-tools
+
+# Report Results
+notifications:
+  email:
+    recipients:
+      - ddegroot@talon.nl
+#      - c@zu.io
+
+#matrix:
+#  exclude:
+#      - os: osx
+#        compiler: gcc
