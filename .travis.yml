@@ -5,8 +5,6 @@ compiler:
  - clang
  - gcc
 
-script: cmake
-
 env:
 # - REPOS=lucid
 # - REPOS=precise
@@ -22,6 +20,8 @@ before_install:
  - echo "deb http://archive.canonical.com/ubuntu/ ${REPOS} partner"                                    | sudo tee -a /etc/apt/sources.list.d/trusty.list
  - sudo apt-get update -qq
  - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libhiredis-dev redis-server libevent-dev libevent-pthreads-2.0-5 libevent-2.0-5
+
+script: mkdir build && cd build && cmake ../ && make
 
 # Report Results
 notifications:
