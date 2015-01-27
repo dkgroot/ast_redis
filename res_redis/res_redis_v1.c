@@ -45,10 +45,11 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 #include <asterisk/stasis.h>
 #endif
 
-
 #include "../include/pbx_event_message_serializer.h"
 #include "../include/message_queue_pubsub.h"
 #include "../include/shared.h"
+
+pthread_rwlock_t msq_event_channel_map_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 
 /*
  * declarations
@@ -67,13 +68,47 @@ static struct ast_cli_entry redis_cli[] = {
 AST_MUTEX_DEFINE_STATIC(reload_lock);
 static char *default_eid_str;
 
+AST_RWLOCK_DEFINE_STATIC(event_map_lock);
+
+typedef struct event_map {
+	const char *name;
+//	boolean_t publish;
+//	boolean_t subscribe;
+//	char *channel;
+//	char *pattern;
+//	msq_subscription_callback_t callback;
+} event_t;
+static event_t event_map[] = {
+	[EVENT_MWI]			= {.name="mwi",},
+	[EVENT_DEVICE_STATE]		= {.name="device_state",},
+	[EVENT_DEVICE_STATE_CHANGE] 	= {.name="device_state_change"},
+	[EVENT_PING]			= {.name="ping"}
+};
+
+event_type_t find_event_byname(const char *channelname) 
+{
+	event_type_t chan;
+	ast_rwlock_rdlock(&event_map_lock);
+	for (chan = 0; chan < ARRAY_LEN(event_map); chan++ ) {
+		if (event_map[chan].name && !strcasecmp(channelname, event_map[chan].name)) {
+			ast_rwlock_rdlock(&event_map_lock);
+			return chan;
+		}
+	}
+	ast_rwlock_rdlock(&event_map_lock);
+	return chan;
+}
+
+
 static void cleanup_module(void)
 {
 	log_verbose(2, "res_redis: Enter (%s)\n", __PRETTY_FUNCTION__);
 	exception_t res = NO_EXCEPTION;
 
 	// cleanup first;
+	msq_list_servers();
 	msq_remove_all_servers();
+	msq_list_servers();
 	
 	log_verbose(2, "res_redis: Exit %s%s\n", res ? ", Exception Occured: " : "", res ? exception2str[res].str : "");
 }
@@ -91,7 +126,8 @@ static int load_general_config(struct ast_config *cfg)
 				res |= msq_add_server(NULL, 0, v->value);
 			} else {
 				char *valuestr = strdupa(v->value);
-				char *url = strtok(valuestr, ":");;
+				char *url = strsep(&valuestr, ":");
+				ast_log(LOG_WARNING, "v->value: %s URL:%s, PortStr:%s, Port%d\n", v->value, url, valuestr, atoi(valuestr));
 				int port = atoi(valuestr);
 				res |= msq_add_server(url, port, NULL);
 			}
@@ -100,9 +136,14 @@ static int load_general_config(struct ast_config *cfg)
 			ast_log(LOG_WARNING, "Unknown option '%s'\n", v->name);
 		}
 	}
-	//msq_list_servers();
 	ast_debug(2,"Done loading config: [general] section\n");
 	return res;
+}
+
+void msq_channel_cb(event_type_t msq_event, void *reply, void *privdata) {
+}
+
+void pbx_channel_cb(event_type_t msq_event, void *reply, void *privdata) {
 }
 
 static int load_channel_config(struct ast_config *cfg, const char *cat)
@@ -111,13 +152,23 @@ static int load_channel_config(struct ast_config *cfg, const char *cat)
 	int res = 0;
 	ast_debug(2,"Loading loading category [%s]\n", cat);
 
+	//lookup by channelname
+	event_type_t channel = find_event_byname(cat);
+	if (!channel) {
+		ast_log(LOG_ERROR, "channel in category:'%s' could not be found\n", cat);
+		return res!=1;
+	}
+
 	for (v = ast_variable_browse(cfg, cat); v && !res; v = v->next) {
 		if (!strcasecmp(v->name, "publish")) {
-			res |= 0;
+			res |= msq_set_channel(channel, PUBLISH, ast_true(v->value));
+			// res |= pbx_set_channel(channel, PUBLISH, ast_true(v->value));
 		} else if (!strcasecmp(v->name, "subscribe")) {
-			res |= 0;
+			res |= msq_set_channel(channel, SUBSCRIBE, ast_true(v->value));
+			//res |= pbx_set_channel(channel, SUBSCRIBE, ast_true(v->value));
 		} else if (!strcasecmp(v->name, "channel")) {
-			res |= 0;
+			res |= msq_add_subscription(channel, v->value, "", msq_channel_cb);;
+			//res |= pbx_set_subscription_cb(channel, 
 		} else if (!strcasecmp(v->name, "device_prefix")) {
 			res |= 0;
 		} else if (!strcasecmp(v->name, "dump_state_table_on_connection")) {
@@ -174,6 +225,7 @@ static int load_module(void)
 		res = AST_MODULE_LOAD_DECLINE;
 		goto failed;
 	}
+	msq_list_servers();
 	
 	// start libevent loop
 	
@@ -184,6 +236,8 @@ static int load_module(void)
 	ast_cli_register_multiple(redis_cli, ARRAY_LEN(redis_cli));
 	ast_enable_distributed_devstate();
 
+	//msq_start_eventloop();
+	msq_connect_to_next_server();
 	ast_log(LOG_NOTICE,"res_redis loaded\n");
 	return AST_MODULE_LOAD_SUCCESS;
 failed:
@@ -196,6 +250,7 @@ static int unload_module(void)
 	ast_debug(1, "Unloading res_config_redis...\n");
 	ast_cli_unregister_multiple(redis_cli, ARRAY_LEN(redis_cli));
 
+	msq_stop_eventloop();
 	cleanup_module();
 	ast_debug(1, "Done Unloading res_config_redis...\n");
 	return 0;

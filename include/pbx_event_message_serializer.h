@@ -19,12 +19,12 @@
 typedef void (*pbx_subscription_callback_t) (event_type_t event_type, char *data);
 typedef struct pbx_event_map pbx_event_map_t;
 
-int pbx_subscribe(event_type_t event_type, pbx_subscription_callback_t callback);
-int pbx_unsubscribe(event_type_t event_type);
-int pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf_len);
+exception_t pbx_subscribe(event_type_t event_type, pbx_subscription_callback_t callback);
+exception_t pbx_unsubscribe(event_type_t event_type);
+exception_t pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf_len);
 
 /* should become private instead / to be removed*/
-int message2json(char *jsonmsgbuffer, const size_t msg_len, const struct ast_event *event);
-int json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *jsonmsgbuffer);
+exception_t message2json(char *jsonmsgbuffer, const size_t msg_len, const struct ast_event *event);
+exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *jsonmsgbuffer);
 
 #endif /* _AST_EVENT_MESSAGE_SERIALIZER_H_ */

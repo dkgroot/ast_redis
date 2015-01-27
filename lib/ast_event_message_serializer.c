@@ -34,9 +34,12 @@ static void ast_event_cb(const struct ast_event *event, void *data);
 AST_RWLOCK_DEFINE_STATIC(event_map_lock);
  
 struct pbx_event_map {
-	int ast_event_type;
+	const int ast_event_type;
 	const char *name;
 	struct ast_event_sub *sub;
+	boolean_t publish;
+	boolean_t subscribe;
+	boolean_t dump_state_table_on_connection;
 	pbx_subscription_callback_t callback;
 };
 static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
@@ -49,9 +52,7 @@ static pbx_event_map_t event_map[AST_EVENT_TOTAL] = {
 /*
  * public
  */
-
-/* public */
-int pbx_subscribe(event_type_t event_type, pbx_subscription_callback_t callback)
+exception_t pbx_subscribe(event_type_t event_type, pbx_subscription_callback_t callback)
 {
 	exception_t res = GENERAL_EXCEPTION;
 	log_verbose(2, "PBX: Enter (%s)\n", __PRETTY_FUNCTION__);
@@ -68,22 +69,25 @@ int pbx_subscribe(event_type_t event_type, pbx_subscription_callback_t callback)
 	return res;
 }
 
-int pbx_unsubscribe(event_type_t event_type)
+exception_t pbx_unsubscribe(event_type_t event_type)
 {
+	exception_t res = GENERAL_EXCEPTION;
 	ast_rwlock_rdlock(&event_map_lock);
 	if (!event_map[event_type].sub) {
 		// not subscribed error
 	} else {
 		event_map[event_type].sub = ast_event_unsubscribe((struct ast_event_sub *)event_map[event_type].sub);
 		event_map[event_type].callback = NULL;
+		res = NO_EXCEPTION;
 	}
 	ast_rwlock_unlock(&event_map_lock);
-	return 0;
+	return res;
 }
 
-int pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf_len)
+exception_t  pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf_len)
 {
-	return -1;
+	exception_t res = GENERAL_EXCEPTION;
+	return res;
 }
 
 /*
@@ -212,8 +216,9 @@ inline static void trim_char_bothends(char *inout, char chr)
 }
 
 /* generic ast_event to json encode */
-int message2json(char *msg, const size_t msg_len, const struct ast_event *event) 
+exception_t message2json(char *msg, const size_t msg_len, const struct ast_event *event) 
 {
+	exception_t res = DECODING_EXCEPTION;
 	unsigned int curpos = 1;
 	memset(msg, 0, msg_len);
 	msg[0] = '{';
@@ -221,7 +226,7 @@ int message2json(char *msg, const size_t msg_len, const struct ast_event *event)
 	struct ast_event_iterator i;
 	if (ast_event_iterator_init(&i, event)) {
 		ast_log(LOG_ERROR, "Failed to initialize event iterator.  :-(\n");
-		return 0;
+		return res;
 	}
 	ast_debug(1, "Encoding Event: %s\n", ast_event_get_type_name(event));
 	do {
@@ -270,13 +275,13 @@ int message2json(char *msg, const size_t msg_len, const struct ast_event *event)
 	msg[curpos-1] = '}';
 	
 	ast_debug(1, "encoded string: '%s'\n", msg);
-	return 1;
+	return NO_EXCEPTION;
 }
 
 /* generic json to ast_event decoder */
-int json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
+exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
 {
-	int res = DECODING_ERROR;
+	exception_t res = DECODING_EXCEPTION;
 	struct ast_event *event = *eventref;
 	struct ast_eid eid;
 	char *tokenstr = strdupa(msg);
@@ -289,10 +294,10 @@ int json2message(struct ast_event **eventref, enum ast_event_type event_type, co
 	int cachable = 0;
 
 //	if (!(event = ast_event_new(event_type, AST_EVENT_IE_END))) {		/* can't use this because it automatically adds my local EID to the new event */
-//		return DECODING_ERROR;
+//		return DECODING_EXCEPTION;
 //	}
         if (!(event = ast_calloc(1, sizeof(*event)))) {				/* resorting to local copy of ast_event structure :-( */
-                return MALLOC_ERROR; 
+                return MALLOC_EXCEPTION; 
         }
         event->type = htons(event_type);
         event->event_len = htons(sizeof(*event));
@@ -349,7 +354,7 @@ int json2message(struct ast_event **eventref, enum ast_event_type event_type, co
 			}
 			/* realloc inside one of the append functions failed */
 			if (!event) {
-			        return DECODING_ERROR;
+			        return DECODING_EXCEPTION;
                         }
 		}
 		entry = strtok(NULL, delims);

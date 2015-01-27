@@ -30,17 +30,23 @@
  */
 typedef struct msq_connection_map msq_connection_map_t;
 static exception_t msq_processRedisAsyncConnError(redisAsyncContext *Conn);
+exception_t _msq_remove_server(const char *url, int port, const char *socket);
+exception_t _msq_remove_subscription(event_type_t channel);
+exception_t _msq_subscribe(event_type_t channel);
+exception_t _msq_unsubscribe(event_type_t channel);
 /*
  * global
  */
-pthread_rwlock_t msq_event_channel_map_rwlock = PTHREAD_RWLOCK_INITIALIZER;
-struct msq_event_channel_map {
+pthread_rwlock_t msq_event_map_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+struct msq_event_map {
 	const char *name;
+	boolean_t publish;
+	boolean_t subscribe;
 	char *channel;
 	char *pattern;
 	msq_subscription_callback_t callback;
 };
-static msq_event_channel_t msq_event_channel_map[] = {
+static msq_event_t msq_event_map[] = {
 	[EVENT_MWI]			= {.name="mwi",},
 	[EVENT_DEVICE_STATE]		= {.name="device_state",},
 	[EVENT_DEVICE_STATE_CHANGE] 	= {.name="device_state_change"},
@@ -60,7 +66,8 @@ struct msq_servers {
 	char *socket;
 	enum connection_type connection_type;
 	redisAsyncContext *redisConn[2];
-	//ev_loop *evloop;
+	pthread_t thread;
+	struct event_base *evloop_base;
 	server_t *next;
 };
 static server_t *servers_root = NULL;
@@ -82,7 +89,7 @@ static inline void unlock_rwlock(pthread_rwlock_t **lock)
  */
 exception_t msq_add_server(const char *url, int port, const char *socket)
 {
-	log_verbose(2, "RedisMSQ: Enter (%s) \n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter \n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	raii_wrlock(&msq_server_rwlock);
 	server_t *server = servers_root;
@@ -121,6 +128,7 @@ exception_t msq_add_server(const char *url, int port, const char *socket)
 		} else {
 			log_debug("RedisMSQ: Failed to Add Server [url:%s / port:%d / socket:%s]\n", url, port, socket);
 			free(server);
+			server = NULL;
 		}
 		// tie the node into the list
 		if (server) {
@@ -131,13 +139,13 @@ exception_t msq_add_server(const char *url, int port, const char *socket)
 			}
 		}
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
 exception_t msq_list_servers()
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	raii_rdlock(&msq_server_rwlock);
 	server_t *server = servers_root;
@@ -150,13 +158,13 @@ exception_t msq_list_servers()
 		server = server->next;
 		res = NO_EXCEPTION;
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }	
 
 exception_t msq_remove_all_servers()
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	raii_wrlock(&msq_server_rwlock);
 	server_t *server = servers_root;
@@ -167,21 +175,23 @@ exception_t msq_remove_all_servers()
 		nextserver = server->next;
 		if (server->socket) {
 			free(server->socket);
+			server->socket = NULL;
 		}
 		if (server->url) {
 			free(server->url);
+			server->url = NULL;
 		}
 		free(server);
-		res = NO_EXCEPTION;
 		server = nextserver;
+		res = NO_EXCEPTION;
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
-exception_t msq_remove_server(const char *url, int port, const char *socket)
+exception_t _msq_remove_server(const char *url, int port, const char *socket)
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	raii_wrlock(&msq_server_rwlock);
 	server_t *server = servers_root;
@@ -196,9 +206,11 @@ exception_t msq_remove_server(const char *url, int port, const char *socket)
 			prevserver->next = server->next;
 			if (server->socket) {
 				free(server->socket);
+				server->socket = NULL;
 			}
 			if (server->url) {
 				free(server->url);
+				server->url = NULL;
 			}
 			free(server);
 			server = prevserver->next;
@@ -207,13 +219,13 @@ exception_t msq_remove_server(const char *url, int port, const char *socket)
 		prevserver = server;
 		server = server->next;
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
 static exception_t msq_processRedisAsyncConnError(redisAsyncContext *Conn)
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	if (Conn && Conn->err) {
 		log_debug("RedisMSQ: Asynchronous Error: '%s'\n", Conn->errstr);
 		return REDIS_EXCEPTION;
@@ -223,10 +235,12 @@ static exception_t msq_processRedisAsyncConnError(redisAsyncContext *Conn)
 
 exception_t msq_connect_to_next_server()
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	// check if connected
-	msq_disconnect();
+	if (current_server) {
+		msq_disconnect();
+	}
 		
 	raii_wrlock(&msq_server_rwlock);
 	server_t *server = current_server;
@@ -236,29 +250,47 @@ exception_t msq_connect_to_next_server()
 		current_server = servers_root;
 	}
 	
-	switch (server->connection_type) {
+	switch (current_server->connection_type) {
 		case SOCKET:
-			server->redisConn[PUBLISH] = redisAsyncConnectUnix(server->socket);
-			res |= msq_processRedisAsyncConnError(server->redisConn[PUBLISH]);
-			server->redisConn[SUBSCRIBE] = redisAsyncConnectUnix(server->socket);
-			res |= msq_processRedisAsyncConnError(server->redisConn[SUBSCRIBE]);
+			current_server->redisConn[PUBLISH] = redisAsyncConnectUnix(current_server->socket);
+			res |= msq_processRedisAsyncConnError(current_server->redisConn[PUBLISH]);
+			current_server->redisConn[SUBSCRIBE] = redisAsyncConnectUnix(current_server->socket);
+			res |= msq_processRedisAsyncConnError(current_server->redisConn[SUBSCRIBE]);
 			break;
 		case URL:
-			server->redisConn[PUBLISH] = redisAsyncConnect(server->url, server->port);
-			res |= msq_processRedisAsyncConnError(server->redisConn[PUBLISH]);
-			server->redisConn[SUBSCRIBE] = redisAsyncConnect(server->url, server->port);
-			res |= msq_processRedisAsyncConnError(server->redisConn[SUBSCRIBE]);
+			current_server->redisConn[PUBLISH] = redisAsyncConnect(current_server->url, current_server->port);
+			res |= msq_processRedisAsyncConnError(current_server->redisConn[PUBLISH]);
+			current_server->redisConn[SUBSCRIBE] = redisAsyncConnect(current_server->url, current_server->port);
+			res |= msq_processRedisAsyncConnError(current_server->redisConn[SUBSCRIBE]);
 			break;
 	}
 	
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	msq_start_eventloop();
+
+	event_type_t chan = 0;
+	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
+		if (msq_event_map[chan].subscribe) {
+			// unsubscribe loop
+			_msq_subscribe(chan);
+		}
+	}
+	
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
 exception_t msq_disconnect()
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
+	
+	event_type_t chan = 0;
+	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
+		if (msq_event_map[chan].subscribe) {
+			// unsubscribe loop
+			_msq_unsubscribe(chan);
+		}
+	}
 	
 	if (current_server) {
 		raii_wrlock(&msq_server_rwlock);
@@ -273,122 +305,195 @@ exception_t msq_disconnect()
 			current_server->redisConn[SUBSCRIBE] = NULL;
 		}
 		res = NO_EXCEPTION;
+		msq_stop_eventloop();
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
-exception_t msq_publish(event_type_t channel, char *publishmsg)
+event_type_t msq_find_channel(const char *channelname) 
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
+	event_type_t chan;
+	raii_rdlock(&msq_event_map_rwlock);
+	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
+		if (msq_event_map[chan].name && !strcasecmp(channelname, msq_event_map[chan].name)) {
+			return chan;
+		}
+	}
+	return 0;
+}
+
+exception_t msq_set_channel(event_type_t channel, msq_type_t type, boolean_t onoff)
+{
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	msq_event_map[channel].publish = onoff;
 	exception_t res = NO_EXCEPTION;
-	raii_rdlock(&msq_event_channel_map_rwlock);
-	if (msq_event_channel_map[channel].channel) {
-		log_verbose(1,"RedisMSQ: PUBLISH channel: '%s', mesg: '%s'\n", msq_event_channel_map[channel].channel, publishmsg);
-		redisAsyncCommand(current_server->redisConn[PUBLISH], NULL, NULL, "PUBLISH %s %b", msq_event_channel_map[channel].channel, publishmsg, (size_t)strlen(publishmsg));
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	return res;
+}
+
+exception_t msq_publish(event_type_t channel, const char *publishmsg)
+{
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = NO_EXCEPTION;
+	raii_rdlock(&msq_event_map_rwlock);
+	if (msq_event_map[channel].channel) {
+		log_verbose(1,"RedisMSQ: PUBLISH channel: '%s', mesg: '%s'\n", msq_event_map[channel].channel, publishmsg);
+		redisAsyncCommand(current_server->redisConn[PUBLISH], NULL, NULL, "PUBLISH %s %b", msq_event_map[channel].channel, publishmsg, (size_t)strlen(publishmsg));
 		res |= msq_processRedisAsyncConnError(current_server->redisConn[PUBLISH]);
 	} 
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
-exception_t msq_subscribe(event_type_t channel, msq_subscription_callback_t callback)
+exception_t msq_add_subscription(event_type_t channel, const char *channelstr, const char *patternstr, msq_subscription_callback_t callback)
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
-	exception_t res = NO_EXCEPTION;
-	if (msq_event_channel_map[channel].channel || msq_event_channel_map[channel].callback) {
-		if (msq_event_channel_map[channel].pattern) {
-			log_verbose(1,"RedisMSQ: SUBSCRIBE channel: '%s:%s'\n", msq_event_channel_map[channel].channel, msq_event_channel_map[channel].pattern);
-			redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "SUBSCRIBE %s:%s", msq_event_channel_map[channel].channel, msq_event_channel_map[channel].pattern);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = GENERAL_EXCEPTION;
+	if (msq_event_map[channel].name) {
+		if (msq_event_map[channel].channel || msq_event_map[channel].callback || msq_event_map[channel].pattern) {
+			// previous subscription
+			log_debug("Error: previous subscription exists");
+			return res;
 		} else {
-			log_verbose(1,"RedisMSQ: SUBSCRIBE channel: '%s'\n", msq_event_channel_map[channel].channel);
-			redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "SUBSCRIBE %s", msq_event_channel_map[channel].channel);
-		}
-		if (!msq_processRedisAsyncConnError(current_server->redisConn[SUBSCRIBE])) {
-			if (msq_event_channel_map[channel].callback) {
-				free(msq_event_channel_map[channel].channel);
+			if (!channelstr || !callback) {
+				log_debug("Error: add_subscription required both a channelstr and a callback");
+				return res;
 			}
-			if (msq_event_channel_map[channel].pattern) {
-				free(msq_event_channel_map[channel].pattern);
+			if (channelstr) {
+				msq_event_map[channel].channel = strdup(channelstr);
 			}
-			msq_event_channel_map[channel].callback = NULL;
-		} else {
-			res = REDIS_EXCEPTION;
+			if (callback) {
+				msq_event_map[channel].callback = callback;
+			}
+			if (patternstr) {
+				msq_event_map[channel].pattern = strdup(patternstr);
+			}
+			res = NO_EXCEPTION;
 		}
 	} else {
-		res = GENERAL_EXCEPTION;
+		log_debug("Error: not a valid channel");
+		return res;
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
-exception_t msq_unsubscribe(event_type_t channel)
+exception_t _msq_drop_all_subscriptions(event_type_t channel)
 {
-	log_verbose(2, "RedisMSQ: Enter (%s)\n", __PRETTY_FUNCTION__);
-	exception_t res = NO_EXCEPTION;
-	if (!msq_event_channel_map[channel].channel || !msq_event_channel_map[channel].callback) {
-		if (msq_event_channel_map[channel].pattern) {
-			log_verbose(1,"RedisMSQ: UNSUBSCRIBE channel: '%s:%s'\n", msq_event_channel_map[channel].channel, msq_event_channel_map[channel].pattern);
-			redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "UNSUBSCRIBE %s:%s", msq_event_channel_map[channel].channel, msq_event_channel_map[channel].pattern);
-		} else {
-			log_verbose(1,"RedisMSQ: UNSUBSCRIBE channel: '%s'\n", msq_event_channel_map[channel].channel);
-			redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "UNSUBSCRIBE %s", msq_event_channel_map[channel].channel);
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = GENERAL_EXCEPTION;
+	event_type_t chan = 0;
+
+	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
+		if (msq_event_map[channel].name) {
+			if (msq_event_map[channel].callback) {
+				free(msq_event_map[channel].channel);
+			}
+			if (msq_event_map[channel].pattern) {
+				free(msq_event_map[channel].pattern);
+			}
+			msq_event_map[channel].callback = NULL;
+			res = NO_EXCEPTION;
 		}
-		if (!msq_processRedisAsyncConnError(current_server->redisConn[SUBSCRIBE])) {
-			if (msq_event_channel_map[channel].callback) {
-				free(msq_event_channel_map[channel].channel);
-			}
-			if (msq_event_channel_map[channel].pattern) {
-				free(msq_event_channel_map[channel].pattern);
-			}
-			msq_event_channel_map[channel].callback = NULL;
+	}
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	return res;	
+}
+
+exception_t _msq_remove_subscription(event_type_t channel)
+{
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = GENERAL_EXCEPTION;
+	if (msq_event_map[channel].name) {
+		if (!msq_event_map[channel].channel || !msq_event_map[channel].callback) {
+			log_debug("Error: no previous subscription exists");
+			return res;
 		} else {
-			res = REDIS_EXCEPTION;
+			if (msq_event_map[channel].callback) {
+				free(msq_event_map[channel].channel);
+			}
+			if (msq_event_map[channel].pattern) {
+				free(msq_event_map[channel].pattern);
+			}
+			msq_event_map[channel].callback = NULL;
+			res = NO_EXCEPTION;
 		}
 	} else {
-		res = GENERAL_EXCEPTION;
+		log_debug("Error: not a valid channel");
+		return res;
 	}
-	log_verbose(2, "RedisMSQ: Function Exit (%s) %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
 }
 
-
-/* 
- * eventloop
- */
-exception_t msq_start_eventloop() 
+exception_t _msq_subscribe(event_type_t channel)
 {
-	return GENERAL_EXCEPTION;
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = NO_EXCEPTION;
+	if (msq_event_map[channel].name) {
+		if (msq_event_map[channel].channel || msq_event_map[channel].callback) {
+			if (msq_event_map[channel].pattern) {
+				log_verbose(1,"RedisMSQ: SUBSCRIBE channel: '%s:%s'\n", msq_event_map[channel].channel, msq_event_map[channel].pattern);
+				redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "SUBSCRIBE %s:%s", msq_event_map[channel].channel, msq_event_map[channel].pattern);
+			} else {
+				log_verbose(1,"RedisMSQ: SUBSCRIBE channel: '%s'\n", msq_event_map[channel].channel);
+				redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "SUBSCRIBE %s", msq_event_map[channel].channel);
+			}
+		} else {
+			res = GENERAL_EXCEPTION;
+		}
+	} else {
+		log_debug("Error: not a valid channel");
+		return res;
+	}
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	return res;
 }
 
-exception_t msq_stop_eventloop() 
+exception_t _msq_unsubscribe(event_type_t channel)
 {
-	return GENERAL_EXCEPTION;
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = NO_EXCEPTION;
+	if (msq_event_map[channel].name) {
+		if (!msq_event_map[channel].channel || !msq_event_map[channel].callback) {
+			if (msq_event_map[channel].pattern) {
+				log_verbose(1,"RedisMSQ: UNSUBSCRIBE channel: '%s:%s'\n", msq_event_map[channel].channel, msq_event_map[channel].pattern);
+				redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "UNSUBSCRIBE %s:%s", msq_event_map[channel].channel, msq_event_map[channel].pattern);
+			} else {
+				log_verbose(1,"RedisMSQ: UNSUBSCRIBE channel: '%s'\n", msq_event_map[channel].channel);
+				redisAsyncCommand(current_server->redisConn[SUBSCRIBE], NULL, NULL, "UNSUBSCRIBE %s", msq_event_map[channel].channel);
+			}
+		} else {
+			res = GENERAL_EXCEPTION;
+		}
+	} else {
+		log_debug("Error: not a valid channel");
+		return res;
+	}
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	return res;
 }
-
-/*
-https://gist.github.com/dspezia/4149768
-http://stackoverflow.com/questions/13568465/reconnecting-with-hiredis
-
 
 pthread_mutex_t msq_eventloop_mutex = PTHREAD_MUTEX_INITIALIZER;
 int stopped;
 
-void connectCallBack(const redisAsyncContext *c, int status) {
+static void redis_connect_cb(const redisAsyncContext *c, int status) {
 	if (status != REDIS_OK) {
 		log_verbose(2, "Error: %s\n", c->errstr);
-		msq_connect_to_next_server();
+		//msq_connect_to_next_server();
 	} else {
 		log_verbose(2, "Connected...\n");
 	}
 }
 
-void disconnectCallBack(const redisAsyncContext *c, int status) {
+static void redis_disconnect_cb(const redisAsyncContext *c, int status) {
 	if (status != REDIS_OK) {
 		log_verbose(2, "Error: %s\n", c->errstr);
 	} else {
 		log_verbose(2, "Disonnected...\n");
 	}
+/*	
 	pthread_mutex_lock(&msq_eventloop_mutex);
 	if (!stopped) {
 		pthread_mutex_unlock(&msq_eventloop_mutex);
@@ -396,7 +501,74 @@ void disconnectCallBack(const redisAsyncContext *c, int status) {
 		return;
 	}
 	pthread_mutex_unlock(&msq_eventloop_mutex);
+*/
 }
+
+
+/* 
+ * eventloop
+ */
+#define EVTHREAD_USE_PTHREADS_IMPLEMENTED 1
+static void *eventloop_dispatch_thread(void *data) 
+{
+	log_debug("Entering eventlog_dispatch thread");
+	struct event_base *eventbase = data;
+	redisLibeventAttach(current_server->redisConn[PUBLISH],eventbase);
+	redisLibeventAttach(current_server->redisConn[SUBSCRIBE],eventbase);
+	
+	redisAsyncSetConnectCallback(current_server->redisConn[PUBLISH], redis_connect_cb);
+	redisAsyncSetDisconnectCallback(current_server->redisConn[PUBLISH], redis_disconnect_cb);
+	
+	redisAsyncSetConnectCallback(current_server->redisConn[SUBSCRIBE], redis_connect_cb);
+	redisAsyncSetDisconnectCallback(current_server->redisConn[SUBSCRIBE], redis_disconnect_cb);
+
+	event_base_dispatch(eventbase);
+	log_debug("Exiting eventlog_dispatch thread");
+	
+	// cleanup ?
+	
+	return NULL;
+} 
+
+exception_t msq_start_eventloop() 
+{
+	raii_wrlock(&msq_server_rwlock);
+	exception_t res = GENERAL_EXCEPTION;
+	if (!current_server) {
+		return res;
+	}
+	event_init();
+	if ((current_server->evloop_base = event_base_new()) == NULL) {
+		log_debug("Unable to create socket accept event base");
+		return LIBEVENT_EXCEPTION;
+	}
+	if (pthread_create(&current_server->thread, NULL, eventloop_dispatch_thread, current_server->evloop_base)) {
+		log_debug("Error starting Redis dispatch thread.\n");
+		return LIBEVENT_EXCEPTION;
+	}
+	return NO_EXCEPTION;
+}
+
+exception_t msq_stop_eventloop() 
+{
+	raii_wrlock(&msq_server_rwlock);
+	if (event_base_loopexit(current_server->evloop_base, NULL)) {
+		log_debug("Error shutting down server");
+		return LIBEVENT_EXCEPTION;
+	}
+	int s = pthread_join(current_server->thread, NULL);
+	if (s != 0)
+		log_debug("Error thread join.\n");
+	event_base_free(current_server->evloop_base);
+	return NO_EXCEPTION;
+}
+
+/*
+https://gist.github.com/dspezia/4149768
+http://stackoverflow.com/questions/13568465/reconnecting-with-hiredis
+
+
+
 
 void checkConnections()
 {

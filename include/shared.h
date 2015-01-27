@@ -19,13 +19,17 @@
 #ifndef _SHARED_GUARD_H_
 #define _SHARED_GUARD_H_
 
+#define ARRAY_LEN(a) (size_t) (sizeof(a) / sizeof(0[a]))
+typedef enum { FALSE = 0, TRUE = 1 } boolean_t; 
+
 typedef enum exceptions {
-	NO_EXCEPTION,
-	MALLOC_EXCEPTION,
-	EXISTS_EXCEPTION,
-	DECODING_EXCEPTION,
-	REDIS_EXCEPTION,
-	GENERAL_EXCEPTION,
+	NO_EXCEPTION		= 0,
+	MALLOC_EXCEPTION 	= 100,
+	LIBEVENT_EXCEPTION	= 101,
+	EXISTS_EXCEPTION	= 102,	
+	DECODING_EXCEPTION	= 103,
+	REDIS_EXCEPTION 	= 104,
+	GENERAL_EXCEPTION	= 105,
 } exception_t;
 
 static struct {
@@ -33,6 +37,7 @@ static struct {
 } exception2str[] = {
 	[NO_EXCEPTION] = {""},
 	[MALLOC_EXCEPTION] = {"Malloc/Free Exception"},
+	[LIBEVENT_EXCEPTION] = {"LibEvent Exception"},
 	[EXISTS_EXCEPTION] = {"Already Exists Exception"},
 	[DECODING_EXCEPTION] = {"Decoding Exception"},
 	[REDIS_EXCEPTION] = {"Redis Exception"},
@@ -40,11 +45,9 @@ static struct {
 };
 
 enum returnvalues {
-	MALLOC_ERROR,
-	DECODING_ERROR,
-	EID_SELF,
-	OK,
-	OK_CACHABLE,
+	EID_SELF	= 1,
+	OK		= 2,
+	OK_CACHABLE	= 3,
 };
 
 typedef enum event_type {
