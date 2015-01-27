@@ -24,7 +24,8 @@ before_install:
  - echo "deb http://security.ubuntu.com/ubuntu/ ${REPOS}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/trusty.list
  - echo "deb http://archive.canonical.com/ubuntu/ ${REPOS} partner"                                    | sudo tee -a /etc/apt/sources.list.d/trusty.list
  - sudo apt-get update -qq
- - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libhiredis-dev redis-server redis-tools libevent-dev libevent-pthreads-2.0-5 libevent-2.0-5
+# - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libhiredis-dev redis-server redis-tools libevent-dev libevent-pthreads-2.0-5 libevent-2.0-5
+ - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libhiredis-dev redis-server libevent-dev libevent-pthreads-2.0-5 libevent-2.0-5
 
 # Report Results
 notifications:
