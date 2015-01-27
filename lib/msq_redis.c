@@ -32,8 +32,9 @@ typedef struct msq_connection_map msq_connection_map_t;
 static exception_t msq_processRedisAsyncConnError(redisAsyncContext *Conn);
 exception_t _msq_remove_server(const char *url, int port, const char *socket);
 exception_t _msq_remove_subscription(event_type_t channel);
-exception_t _msq_subscribe(event_type_t channel);
-exception_t _msq_unsubscribe(event_type_t channel);
+exception_t _msq_toggle_subscribe_all(boolean_t on);
+exception_t _msq_send_subscribe(event_type_t channel);
+exception_t _msq_send_unsubscribe(event_type_t channel);
 /*
  * global
  */
@@ -267,13 +268,7 @@ exception_t msq_connect_to_next_server()
 	
 	msq_start_eventloop();
 
-	event_type_t chan = 0;
-	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
-		if (msq_event_map[chan].subscribe) {
-			// unsubscribe loop
-			_msq_subscribe(chan);
-		}
-	}
+	res |= _msq_toggle_subscribe_all(TRUE);
 	
 	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
 	return res;
@@ -284,15 +279,9 @@ exception_t msq_disconnect()
 	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = GENERAL_EXCEPTION;
 	
-	event_type_t chan = 0;
-	for (chan = 0; chan < ARRAY_LEN(msq_event_map); chan++ ) {
-		if (msq_event_map[chan].subscribe) {
-			// unsubscribe loop
-			_msq_unsubscribe(chan);
-		}
-	}
+	res |= _msq_toggle_subscribe_all(FALSE);
 	
-	if (current_server) {
+	if (!res && current_server) {
 		raii_wrlock(&msq_server_rwlock);
 		if (current_server->redisConn[PUBLISH]) {
 			// call general unsubscribe
@@ -427,10 +416,29 @@ exception_t _msq_remove_subscription(event_type_t channel)
 	return res;
 }
 
-exception_t _msq_subscribe(event_type_t channel)
+exception_t _msq_toggle_subscribe_all(boolean_t on)
 {
 	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = NO_EXCEPTION;
+	event_type_t chan = 0;
+	for (chan = 0; chan < ARRAY_LEN(msq_event_map) && !res; chan++ ) {
+		if (msq_event_map[chan].subscribe) {
+			if (on) {
+				res |= _msq_send_subscribe(chan);
+			} else {
+				res |= _msq_send_unsubscribe(chan);
+			}
+		}
+	}
+	log_verbose(2, "RedisMSQ: (%s) exit %s%s%s\n", __PRETTY_FUNCTION__, res ? " [Exception Occured: " : "", res ? exception2str[res].str : "", res ? "]" : "");
+	return res;
+}
+
+exception_t _msq_send_subscribe(event_type_t channel)
+{
+	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
+	exception_t res = NO_EXCEPTION;
+	
 	if (msq_event_map[channel].name) {
 		if (msq_event_map[channel].channel || msq_event_map[channel].callback) {
 			if (msq_event_map[channel].pattern) {
@@ -451,7 +459,7 @@ exception_t _msq_subscribe(event_type_t channel)
 	return res;
 }
 
-exception_t _msq_unsubscribe(event_type_t channel)
+exception_t _msq_send_unsubscribe(event_type_t channel)
 {
 	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = NO_EXCEPTION;
