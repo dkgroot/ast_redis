@@ -93,8 +93,13 @@ static inline void unlock_rwlock(pthread_rwlock_t **lock)
 		pthread_rwlock_unlock(*lock);
 	}
 }
+#if __clang__
 #define raii_rdlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__rd_dtor##__LINE__ = _x; pthread_rwlock_rdlock(_x);((void*)__rd_dtor##__LINE__);}
 #define raii_wrlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__wr_dtor##__LINE__ = _x; pthread_rwlock_wrlock(_x);((void*)__wr_dtor##__LINE__);}
+#else
+#define raii_rdlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__rd_dtor##__LINE__ = _x; pthread_rwlock_rdlock(_x);}
+#define raii_wrlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__wr_dtor##__LINE__ = _x; pthread_rwlock_wrlock(_x);}
+#endif
 /* END RAII */
 
 /*
