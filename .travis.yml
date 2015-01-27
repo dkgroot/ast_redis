@@ -2,13 +2,13 @@ language: c
 
 # Setup Build Matrix
 compiler: 
- - clang
+# - clang
  - gcc
 
 env:
 # - REPOS=lucid
 # - REPOS=precise
-# - REPOS=trusty
+ - REPOS=trusty
  - REPOS=utopic
 # - REPOS=vivid
 
@@ -28,4 +28,4 @@ notifications:
   email:
     recipients:
       - ddegroot@talon.nl
-#      - c@zu.io
+      - c@zu.io

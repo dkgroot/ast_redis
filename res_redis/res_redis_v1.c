@@ -140,10 +140,14 @@ static int load_general_config(struct ast_config *cfg)
 	return res;
 }
 
-void msq_channel_cb(event_type_t msq_event, void *reply, void *privdata) {
+void msq_channel_cb(event_type_t msq_event, void *reply, void *privdata) 
+{
+	ast_log(LOG_NOTICE, "msq_channel_cb\n");
 }
 
-void pbx_channel_cb(event_type_t msq_event, void *reply, void *privdata) {
+void pbx_channel_cb(event_type_t msq_event, void *reply, void *privdata) 
+{
+	ast_log(LOG_NOTICE, "pbx_channel_cb\n");
 }
 
 static int load_channel_config(struct ast_config *cfg, const char *cat)
@@ -226,6 +230,7 @@ static int load_module(void)
 		goto failed;
 	}
 	msq_list_servers();
+	msq_list_subscriptions();
 	
 	// start libevent loop
 	
@@ -236,8 +241,8 @@ static int load_module(void)
 	ast_cli_register_multiple(redis_cli, ARRAY_LEN(redis_cli));
 	ast_enable_distributed_devstate();
 
-	//msq_start_eventloop();
-	msq_connect_to_next_server();
+	msq_start();
+	
 	ast_log(LOG_NOTICE,"res_redis loaded\n");
 	return AST_MODULE_LOAD_SUCCESS;
 failed:
@@ -250,8 +255,9 @@ static int unload_module(void)
 	ast_debug(1, "Unloading res_config_redis...\n");
 	ast_cli_unregister_multiple(redis_cli, ARRAY_LEN(redis_cli));
 
-	msq_stop_eventloop();
+	msq_stop();
 	cleanup_module();
+	
 	ast_debug(1, "Done Unloading res_config_redis...\n");
 	return 0;
 }

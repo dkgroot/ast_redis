@@ -33,19 +33,16 @@ typedef struct msq_event_map msq_event_t;
  * public
  */
 exception_t msq_add_server(const char *url, int port, const char *socket);
-exception_t msq_list_servers();
+void msq_list_servers();
 exception_t msq_remove_all_servers();
-//exception_t msq_remove_server(const char *url, int port, const char *socket);
-exception_t msq_connect_to_next_server();
-exception_t msq_disconnect();
 
+event_type_t msq_start();
+event_type_t msq_stop();
 event_type_t msq_find_channel(const char *channelname);
 exception_t msq_set_channel(event_type_t channel, msq_type_t type, boolean_t onoff);
 exception_t msq_publish(event_type_t channel, const char *publishmsg);
 exception_t msq_add_subscription(event_type_t channel, const char *channelstr, const char *patternstr, msq_subscription_callback_t callback);
-//exception_t msq_remove_subscription(event_type_t channel);
-//exception_t msq_subscribe(event_type_t channel);
-//exception_t msq_unsubscribe(event_type_t channel);
+void msq_list_subscriptions();
 exception_t msq_drop_all_subscriptions();
 
 exception_t msq_start_eventloop();
