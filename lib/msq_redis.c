@@ -13,7 +13,7 @@
 
 #include "../include/message_queue_pubsub.h"
 
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,8 +93,8 @@ static inline void unlock_rwlock(pthread_rwlock_t **lock)
 		pthread_rwlock_unlock(*lock);
 	}
 }
-#define raii_rdlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *dtor = _x; pthread_rwlock_rdlock(_x);}
-#define raii_wrlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *dtor = _x; pthread_rwlock_wrlock(_x);}
+#define raii_rdlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__rd_dtor##__LINE__ = _x; pthread_rwlock_rdlock(_x);((void*)__rd_dtor##__LINE__);}
+#define raii_wrlock(_x) {auto __attribute__((cleanup(unlock_rwlock))) pthread_rwlock_t *__wr_dtor##__LINE__ = _x; pthread_rwlock_wrlock(_x);((void*)__wr_dtor##__LINE__);}
 /* END RAII */
 
 /*
@@ -338,7 +338,7 @@ exception_t _msq_disconnect()
 	return res;
 }
 
-event_type_t msq_start()
+exception_t msq_start()
 {
 	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = NO_EXCEPTION;
@@ -351,7 +351,7 @@ event_type_t msq_start()
 	return res;
 }
 
-event_type_t msq_stop()
+exception_t msq_stop()
 {
 	log_verbose(2, "RedisMSQ: (%s) enter\n", __PRETTY_FUNCTION__);
 	exception_t res = NO_EXCEPTION;

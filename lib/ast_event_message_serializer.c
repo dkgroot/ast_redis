@@ -343,7 +343,7 @@ exception_t json2message(struct ast_event **eventref, enum ast_event_type event_
 						ast_str_to_eid(&eid, value);
 						if (!ast_eid_cmp(&ast_eid_default, &eid)) {
 							// Don't feed events back in that originated locally. Quit now.
-							res = EID_SELF;
+							res = EID_SELF_EXCEPTION;
 							goto failed;
 						}
 					        ast_event_append_ie_raw(&event, ie_type, &eid, sizeof(eid));

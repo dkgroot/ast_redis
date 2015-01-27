@@ -36,8 +36,8 @@ exception_t msq_add_server(const char *url, int port, const char *socket);
 void msq_list_servers();
 exception_t msq_remove_all_servers();
 
-event_type_t msq_start();
-event_type_t msq_stop();
+exception_t msq_start();
+exception_t msq_stop();
 event_type_t msq_find_channel(const char *channelname);
 exception_t msq_set_channel(event_type_t channel, msq_type_t type, boolean_t onoff);
 exception_t msq_publish(event_type_t channel, const char *publishmsg);

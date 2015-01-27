@@ -24,6 +24,7 @@ typedef enum { FALSE = 0, TRUE = 1 } boolean_t;
 
 typedef enum exceptions {
 	NO_EXCEPTION		= 0,
+	EID_SELF_EXCEPTION	= 1,
 	MALLOC_EXCEPTION 	= 100,
 	LIBEVENT_EXCEPTION	= 101,
 	EXISTS_EXCEPTION	= 102,	
@@ -36,6 +37,7 @@ static struct {
 	const char *str;
 } exception2str[] = {
 	[NO_EXCEPTION] = {""},
+	[EID_SELF_EXCEPTION] = {"EID Same as out own"},
 	[MALLOC_EXCEPTION] = {"Malloc/Free Exception"},
 	[LIBEVENT_EXCEPTION] = {"LibEvent Exception"},
 	[EXISTS_EXCEPTION] = {"Already Exists Exception"},
@@ -45,7 +47,7 @@ static struct {
 };
 
 enum returnvalues {
-	EID_SELF	= 1,
+//	EID_SELF	= 1,
 	OK		= 2,
 	OK_CACHABLE	= 3,
 };

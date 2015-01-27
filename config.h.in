@@ -13,8 +13,13 @@
 #cmakedefine HAVE_PBX_EVENT_H       @HAVE_PBX_EVENT_H@
 #cmakedefine HAVE_PBX_STASIS_H      @HAVE_PBX_STASIS_H@
 #cmakedefine HAVE_PBX_VERSION_11    @HAVE_PBX_VERSION_11@
-//#cmakedefine HAVE_PBX_VERSION_12    @HAVE_PBX_VERSION_12@
+#cmakedefine HAVE_PBX_VERSION_12    @HAVE_PBX_VERSION_12@
 //#cmakedefine HAVE_PBX_VERSION_13    @HAVE_PBX_VERSION_13@
 //#define SIZEOF_INT @SIZEOF_INT@
+
+// fix clang against asterisk inline issue
+#ifdef __clang__  
+#define LOW_MEMORY
+#endif
 
 #endif

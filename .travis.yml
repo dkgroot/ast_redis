@@ -2,7 +2,7 @@ language: c
 
 # Setup Build Matrix
 compiler: 
-# - clang
+ - clang
  - gcc
 
 env:

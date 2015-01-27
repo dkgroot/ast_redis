@@ -189,7 +189,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
-			struct loc_event_type *etype;
+			struct loc_event_type *etype = NULL;
 			if (!ast_strlen_zero(reply->element[1]->str)) {
 				for (event_type = 0; event_type < ARRAY_LEN(event_types); event_type++) {
 					ast_rwlock_rdlock(&event_types_lock);
@@ -223,7 +223,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 									return;
 								}
 								if ((res = json2message(&event, event_type, msg))) {
-									if (res == EID_SELF) {
+									if (res == EID_SELF_EXCEPTION) {
 										// skip feeding back to self
 										ast_debug(1, "Originated Here. skip (Exception: %s)'\n", exception2str[res].str);
 										return;
