@@ -1,8 +1,5 @@
 language: c
 
-set("CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
-set("CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
-
 # Setup Build Matrix
 
 compiler: 
@@ -25,7 +22,9 @@ before_install:
  - sudo apt-get update -qq
  - sudo apt-get install -qq asterisk asterisk-dev asterisk-config asterisk-modules libhiredis-dev redis-server libevent-dev libevent-pthreads-2.0-5 libevent-2.0-5
 
-script: mkdir build && cd build && cmake ../ && make
+script: 
+ - export CMAKE_C_FLAGS="-g -O0 --coverage" 
+ - mkdir build && cd build && cmake ../ && make
 
 # Report Results
 notifications:
