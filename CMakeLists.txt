@@ -4,13 +4,17 @@ cmake_minimum_required(VERSION 2.8)
 #--------------------------------------------------
 # Compiler Options
 #--------------------------------------------------
-SET(CMAKE_BUILD_TYPE "Debug")
-#SET(CMAKE_C_FLAGS_DEBUG "-std=gnu11 -g -O0 -Wall -Werror")
-#SET(CMAKE_C_FLAGS_RELEASE "-std=gnu11-O2 -Wall")
-SET(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Werror")
-SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 find_package(PkgConfig REQUIRED)
 
+SET(CMAKE_BUILD_TYPE "Debug")
+SET(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Werror")
+SET(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
+SET(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Werror")
+SET(CMAKE_CXX_FLAGS_RELEASE "-O2 -Wall")
+
+# Testing
+enable_testing()
+add_subdirectory(tests)
 #--------------------------------------------------
 # PThread is required
 #-------------------------------------------------- 
