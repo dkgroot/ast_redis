@@ -1,6 +1,10 @@
 language: c
 
+set("CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
+set("CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+
 # Setup Build Matrix
+
 compiler: 
  - clang
  - gcc

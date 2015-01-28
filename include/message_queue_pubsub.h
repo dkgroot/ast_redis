@@ -44,6 +44,8 @@ exception_t msq_publish(event_type_t channel, const char *publishmsg);
 exception_t msq_add_subscription(event_type_t channel, const char *channelstr, const char *patternstr, msq_subscription_callback_t callback);
 void msq_list_subscriptions();
 exception_t msq_drop_all_subscriptions();
+exception_t msq_send_subscribe(event_type_t channel);
+exception_t msq_send_unsubscribe(event_type_t channel);
 
 exception_t msq_start_eventloop();
 exception_t msq_stop_eventloop();

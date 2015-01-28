@@ -72,10 +72,11 @@ AST_RWLOCK_DEFINE_STATIC(event_map_lock);
 
 typedef struct event_map {
 	const char *name;
-//	boolean_t publish;
-//	boolean_t subscribe;
-//	char *channel;
-//	char *pattern;
+	boolean_t publish;
+	boolean_t subscribe;
+	boolean_t active;
+	char *channel;
+	char *pattern;
 //	msq_subscription_callback_t callback;
 } event_t;
 static event_t event_map[] = {
