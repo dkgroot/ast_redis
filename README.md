@@ -1,7 +1,7 @@
 ## Welcome the Redis Plugin for Asterisk
 
 Travis Continues Integration Status: [![Travis](http://img.shields.io/travis/dkgroot/res_redis.svg?style=flat)](https://travis-ci.org/dkgroot/res_redis)
-
+Code-Coverage: [![Coverage Status](https://img.shields.io/coveralls/dkgroot/res_redis.svg)]](https://coveralls.io/r/dkgroot/res_redis?branch=master)
 This project provides three modules to plugin to asterisk, namely:
 - res_redis (Working / Currently Work in progress / Asterisk-11 for now)
   provising distributed devstate between asterisk cluster nodes via redis Pub/Sub
