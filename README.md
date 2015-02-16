@@ -10,6 +10,7 @@ This project provides three modules to plugin to asterisk, namely:
   will provide posting of cdr events to a redis database
 - res_config_redis (To be Done)
   will add realtime database capability via redis.
+- started work on replacement res_redis_v1
 
 ### Prerequisites
 - cmake
