@@ -4,7 +4,7 @@ Travis Continues Integration Status: [![Travis](http://img.shields.io/travis/dkg
 Code-Coverage: [![Coverage Status](https://coveralls.io/repos/dkgroot/ast_redis/badge.svg)](https://coveralls.io/r/dkgroot/ast_redis)
 
 This project provides three modules to plugin to asterisk, namely:
-- res_redis (Working / Currently Work in progress / Asterisk-11 for now)
+- res_redis (Partially Working (Not TheadSafe) / Currently Work in progress / Asterisk-11 for now)
   provising distributed devstate between asterisk cluster nodes via redis Pub/Sub
 - cdr_redis (To Be Done)
   will provide posting of cdr events to a redis database
