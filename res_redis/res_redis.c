@@ -72,6 +72,7 @@ static void ast_event_cb(const struct ast_event *event, void *data);
 #endif
 static void redis_dump_ast_event_cache();
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
+static void redis_unsubscribe_cb(redisAsyncContext *c, void *r, void *privdata);
 
 static struct loc_event_type {
 	const char *name;
@@ -113,7 +114,8 @@ static int redis_connect_nextserver()
 		//redisAsyncFree(redisPubConn);
 	}
 	if (redisSubConn) {
-		redisAsyncCommand(redisSubConn, NULL, NULL, "UNSUBSCRIBE");
+		redisAsyncCommand(redisSubConn, redis_unsubscribe_cb, NULL, "UNSUBSCRIBE");
+		//redisAsyncCommand(redisSubConn, NULL, NULL, "DISCONNECT");
 		
 		//redisAsyncDisconnect(redisSubConn);
 		//redisAsyncFree(redisSubConn);
@@ -167,6 +169,8 @@ void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	if (reply == NULL) {
 		return;
 	}
+	//freeReplyObject(reply);
+	redisAsyncFree(c);
 	AST_LOG_NOTICE_DEBUG("Pong\n");
 }
 
@@ -175,7 +179,29 @@ void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	if (reply == NULL) {
 		return;
 	}
+	//freeReplyObject(reply);
+	redisAsyncFree(c);
 	AST_LOG_NOTICE_DEBUG("Meet\n");
+}
+
+void redis_unsubscribe_cb(redisAsyncContext *c, void *r, void *privdata) {
+	redisReply *reply = r;
+	if (reply == NULL) {
+		return;
+	}
+	//freeReplyObject(reply);
+	redisAsyncFree(c);
+	AST_LOG_NOTICE_DEBUG("Unsubscribe\n");
+}
+
+void redis_publish_cb(redisAsyncContext *c, void *r, void *privdata) {
+	redisReply *reply = r;
+	if (reply == NULL) {
+		return;
+	}
+	//freeReplyObject(reply);
+	redisAsyncFree(c);
+	AST_LOG_NOTICE_DEBUG("Published\n");
 }
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
@@ -220,13 +246,13 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								
 								if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
-									return;
+									goto exit;
 								}
 								if ((res = json2message(&event, event_type, msg))) {
 									if (res == EID_SELF_EXCEPTION) {
 										// skip feeding back to self
 										ast_debug(1, "Originated Here. skip (Exception: %s)'\n", exception2str[res].str);
-										return;
+										goto exit;
 									} else {
 										/*
 										// check decoding
@@ -282,6 +308,9 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 		}		
 	}
 #endif
+exit:
+	redisAsyncFree(c);
+	//freeReplyObject(reply);
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
@@ -412,10 +441,10 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 			struct ast_json *
 			if ((msg = stasis_message_to_json(smsg, NULL))) {
 #else
-			if (message2json(msg, MAX_EVENT_LENGTH, event)) {
+			if (!message2json(msg, MAX_EVENT_LENGTH, event)) {
 #endif
 				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
-				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
+				redisAsyncCommand(redisPubConn, redis_publish_cb, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
 				if (redisPubConn->err) {
 					ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 				}
