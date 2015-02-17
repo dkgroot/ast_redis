@@ -74,6 +74,8 @@ static void ast_event_cb(const struct ast_event *event, void *data);
 static void redis_dump_ast_event_cache();
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata);
 static void redis_unsubscribe_cb(redisAsyncContext *c, void *r, void *privdata);
+static void redis_subscribe_to_channels(void);
+static void redis_unsubscribe_from_channels(void);
 
 static struct loc_event_type {
 	const char *name;
@@ -115,8 +117,7 @@ static int redis_connect_nextserver()
 		//redisAsyncFree(redisPubConn);
 	}
 	if (redisSubConn) {
-		redisAsyncCommand(redisSubConn, redis_unsubscribe_cb, NULL, "UNSUBSCRIBE");
-		//redisAsyncCommand(redisSubConn, NULL, NULL, "DISCONNECT");
+		redis_unsubscribe_from_channels();
 		
 		//redisAsyncDisconnect(redisSubConn);
 		//redisAsyncFree(redisSubConn);
@@ -159,55 +160,57 @@ static int redis_connect_nextserver()
 			}
 		}
 		AST_LOG_NOTICE_DEBUG("Async Connection Started %s\n", curserver);
+		redis_dump_ast_event_cache();
 		break;
 	}
-	redis_dump_ast_event_cache();
 	return -1;
 }
 
 void redis_pong_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
+	AST_LOG_NOTICE_DEBUG("Handle Pong\n");
 	if (reply == NULL) {
 		return;
 	}
 	//freeReplyObject(reply);
 	redisAsyncFree(c);
-	AST_LOG_NOTICE_DEBUG("Pong\n");
 }
 
 void redis_meet_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
+	AST_LOG_NOTICE_DEBUG("Handle Meet\n");
 	if (reply == NULL) {
 		return;
 	}
 	//freeReplyObject(reply);
 	redisAsyncFree(c);
-	AST_LOG_NOTICE_DEBUG("Meet\n");
 }
 
 void redis_unsubscribe_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
+	AST_LOG_NOTICE_DEBUG("Handle Unsubscribe\n");
 	if (reply == NULL) {
 		return;
 	}
 	//freeReplyObject(reply);
 	redisAsyncFree(c);
-	AST_LOG_NOTICE_DEBUG("Unsubscribe\n");
 }
 
+/*
 void redis_publish_cb(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
+	AST_LOG_NOTICE_DEBUG("Handle Publish\n");
 	if (reply == NULL) {
 		return;
 	}
 	//freeReplyObject(reply);
 	redisAsyncFree(c);
-	AST_LOG_NOTICE_DEBUG("Published\n");
+	AST_LOG_NOTICE_DEBUG("Published & Freed\n");
 }
+*/
 
 static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata) 
 {
-//	log_debug("res_redis: Enter (%s)\n", __PRETTY_FUNCTION__);
 #ifndef HAVE_PBX_STASIS_H
 	enum ast_event_type event_type;
 	redisReply *reply = r;
@@ -215,6 +218,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 		return;
 	}
 	if (reply->type == REDIS_REPLY_ARRAY) {
+		AST_LOG_NOTICE_DEBUG("(%s) Handle Subscription Callback\n", __PRETTY_FUNCTION__);
 		if (!strcasecmp(reply->element[0]->str, "MESSAGE")) {
 			struct loc_event_type *etype = NULL;
 			if (!ast_strlen_zero(reply->element[1]->str)) {
@@ -247,34 +251,22 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 								
 								if (strlen(reply->element[2]->str) < ast_event_minimum_length()) {
 									ast_log(LOG_ERROR, "Ignoring event that's too small. %u < %u\n", (unsigned int) strlen(reply->element[2]->str), (unsigned int) ast_event_minimum_length());
-									goto exit;
+									return;
 								}
-								if ((res = json2message(&event, event_type, msg))) {
+								boolean_t cacheable = FALSE;
+								if ((res = json2message(&event, event_type, msg, &cacheable)) < 100) {
 									if (res == EID_SELF_EXCEPTION) {
 										// skip feeding back to self
 										ast_debug(1, "Originated Here. skip (Exception: %s)'\n", exception2str[res].str);
-										goto exit;
+										return;
 									} else {
-										/*
-										// check decoding
-										char eid_str1[32];
-										const void *eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
-										if (eid) {
-											ast_eid_to_str(eid_str1, sizeof(eid_str1), (void *)eid);
-										}
-										ast_debug(1, "event: device: '%s'\n", ast_event_get_ie_str(event, AST_EVENT_IE_DEVICE));
-										ast_debug(1, "event: state: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_STATE));
-										ast_debug(1, "event: device: '%u'\n", ast_event_get_ie_uint(event, AST_EVENT_IE_CACHABLE));
-										ast_debug(1, "event: eid: '%s' / %p\n", eid_str1, eid);
-										*/
-										if (res == OK) {
+										if (!cacheable) {
 #ifdef HAVE_PBX_STASIS_H
 											//ast_publish_device_state();
 #else
 											ast_event_queue(event);
 #endif
-										}
-										if (res == OK_CACHABLE) {
+										} else {
 #ifdef HAVE_PBX_STASIS_H
 											//ast_publish_device_state();
 #else
@@ -285,7 +277,7 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 										res = NO_EXCEPTION;
 									}
 								} else {
-									ast_log(LOG_ERROR, "error decoding %s'\n", msg);
+									ast_log(LOG_ERROR, "error decoding '%s' exception: %d\n", msg, res);
 								}
 #endif
 							} else {
@@ -309,9 +301,8 @@ static void redis_subscription_cb(redisAsyncContext *c, void *r, void *privdata)
 		}		
 	}
 #endif
-exit:
-	redisAsyncFree(c);
-	//freeReplyObject(reply);
+//exit:
+	//redisAsyncFree(c);
 }
 
 void redis_connect_cb(const redisAsyncContext *c, int status) {
@@ -372,6 +363,7 @@ static void redis_dump_ast_event_cache()
 #endif
 		}
 		AST_LOG_NOTICE_DEBUG("Ast Event Cache Dumped to %s\n", curserver);
+		redis_subscribe_to_channels();
 	}
 }
 
@@ -386,11 +378,13 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 	const struct ast_eid *eid;
 	char eid_str[32] = "";
 	eid = ast_event_get_ie_raw(event, AST_EVENT_IE_EID);
-	ast_eid_to_str(eid_str, sizeof(eid_str), (struct ast_eid *) eid);
+	if (eid) {
+		ast_eid_to_str(eid_str, sizeof(eid_str), (struct ast_eid *) eid);
+	}
 	//AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event with EID: '%s' / '%s'\n", eid_str, default_eid_str);
 	
 	if (ast_event_get_type(event) == AST_EVENT_PING) {
-		AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event PING from server with EID: '%s' (Add Handler)\n", eid_str);
+		AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event PING from server with EID: '%s' (Add Handler)\n", eid ? eid_str : "");
 		/*
 		if (ast_event_get_type(event) == AST_EVENT_PING) {
 			const struct ast_eid *eid;
@@ -419,12 +413,12 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 		ast_mutex_unlock(&redis_write_lock);
 	}
 	
-	if (ast_eid_cmp(&ast_eid_default, eid)) {
+	if (eid && ast_eid_cmp(&ast_eid_default, eid)) {
 		// If the event didn't originate from this server, don't send it back out.
 		ast_debug(1, "(ast_event_cb) didn't originate on this server, don't send it back out, skipping: '%s')\n", eid_str);
 		return;
 	}
-	AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event from EID: '%s'\n", eid_str);
+	AST_LOG_NOTICE_DEBUG("(ast_event_cb) Got event from EID: '%s'\n", eid ? eid_str : "");
 #endif	
 	
 	// decode event2msg
@@ -453,7 +447,8 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 #endif
 				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
 				ast_mutex_lock(&redis_write_lock);
-				redisAsyncCommand(redisPubConn, redis_publish_cb, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
+//				redisAsyncCommand(redisPubConn, redis_publish_cb, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
+				redisAsyncCommand(redisPubConn, NULL, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
 				if (redisPubConn->err) {
 					ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 				}
@@ -472,7 +467,7 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 static int set_event(const char *event_type, int pubsub, char *str)
 {
 	unsigned int i;
-	AST_LOG_NOTICE_DEBUG("set_event: %d, %s\n", pubsub, str);
+	AST_LOG_NOTICE_DEBUG("set_event: %s, %s\n", pubsub ? "PUBLISH" : "SUBSCRIBE", str);
 
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
 		if (!event_types[i].name || strcasecmp(event_type, event_types[i].name)) {
@@ -497,6 +492,60 @@ static int set_event(const char *event_type, int pubsub, char *str)
 	AST_LOG_NOTICE_DEBUG("set_event: returning: %d\n", (i == ARRAY_LEN(event_types)) ? -1 : 0);
 
 	return (i == ARRAY_LEN(event_types)) ? -1 : 0;
+}
+
+static void redis_unsubscribe_from_channels(void) 
+{
+	unsigned int i = 0;
+	ast_rwlock_wrlock(&event_types_lock);
+	for (i = 0; i < ARRAY_LEN(event_types); i++) {
+		if (!event_types[i].publish) {
+			ast_debug(1, "Skipping '%s' not published\n", event_types[i].channelstr);
+			continue;
+		}
+		if (event_types[i].sub) {
+#ifdef HAVE_PBX_STASIS_H
+			statis_unsubscribe(event_types[i].sub);
+#else
+			ast_event_unsubscribe(event_types[i].sub);
+#endif
+		}
+		AST_LOG_NOTICE_DEBUG("Unsubscribing from redis channel '%s'\n", event_types[i].channelstr);
+		ast_mutex_lock(&redis_write_lock);
+ 		redisAsyncCommand(redisSubConn, redis_unsubscribe_cb, NULL, "UNSUBSCRIBE %s", event_types[i].channelstr);
+		if (redisSubConn->err) {
+			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisSubConn->errstr);
+		}
+		ast_mutex_unlock(&redis_write_lock);
+	}
+	ast_rwlock_unlock(&event_types_lock);
+}
+
+static void redis_subscribe_to_channels(void) 
+{
+	unsigned int i = 0;
+	ast_rwlock_wrlock(&event_types_lock);
+	for (i = 0; i < ARRAY_LEN(event_types); i++) {
+		if (!event_types[i].publish) {
+			ast_debug(1, "Skipping '%s' not published\n", event_types[i].channelstr);
+			continue;
+		}
+		if (event_types[i].publish && !event_types[i].sub) {
+#ifdef HAVE_PBX_STASIS_H
+			event_types[i].sub = stasis_subscribe(ast_device_state_topic_all(), ast_event_cb, NULL);
+#else
+			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
+#endif
+		}
+		AST_LOG_NOTICE_DEBUG("Subscribing to redis channel '%s'\n", event_types[i].channelstr);
+		ast_mutex_lock(&redis_write_lock);
+ 		redisAsyncCommand(redisSubConn, redis_subscription_cb, NULL, "SUBSCRIBE %s", event_types[i].channelstr);
+		if (redisSubConn->err) {
+			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisSubConn->errstr);
+		}
+		ast_mutex_unlock(&redis_write_lock);
+	}
+	ast_rwlock_unlock(&event_types_lock);
 }
 
 static char *redis_show_members(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
@@ -686,14 +735,8 @@ static void *dispatch_thread_handler(void *data)
 static void cleanup_module(void)
 {
 	unsigned int i = 0;
+	redis_unsubscribe_from_channels();
 	for (i = 0; i < ARRAY_LEN(event_types); i++) {
-		if (event_types[i].sub) {
-#ifdef HAVE_PBX_STASIS_H
-			event_types[i].sub = stasis_unsubscribe(event_types[i].sub);
-#else
-			event_types[i].sub = ast_event_unsubscribe(event_types[i].sub);
-#endif
-		}
 		event_types[i].publish = 0;
 		event_types[i].subscribe = 0;
 		if (event_types[i].channelstr) {
@@ -725,7 +768,6 @@ static void cleanup_module(void)
 static int load_module(void)
 {
 	enum ast_module_load_result res = AST_MODULE_LOAD_FAILURE;
-	unsigned int i = 0;
 
 	AST_LOG_NOTICE_DEBUG("Loading res_config_redis...\n");
 	ast_debug(1, "Loading res_config_redis...\n");
@@ -766,26 +808,6 @@ static int load_module(void)
 #endif	
 	redis_dump_ast_event_cache();
 
-	ast_rwlock_wrlock(&event_types_lock);
-	for (i = 0; i < ARRAY_LEN(event_types); i++) {
-		if (!event_types[i].publish) {
-			ast_debug(1, "Skipping '%s' not published\n", event_types[i].channelstr);
-			continue;
-		}
-		if (event_types[i].publish && !event_types[i].sub) {
-#ifdef HAVE_PBX_STASIS_H
-			event_types[i].sub = stasis_subscribe(ast_device_state_topic_all(), ast_event_cb, NULL);
-#else
-			event_types[i].sub = ast_event_subscribe(i, ast_event_cb, "res_redis", NULL, AST_EVENT_IE_END);
-#endif
-		}
-		AST_LOG_NOTICE_DEBUG("Subscribing to redis channel '%s'\n", event_types[i].channelstr);
- 		redisAsyncCommand(redisSubConn, redis_subscription_cb, NULL, "SUBSCRIBE %s", event_types[i].channelstr);
-		if (redisSubConn->err) {
-			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisSubConn->errstr);
-		}
-	}
-	ast_rwlock_unlock(&event_types_lock);
 	AST_LOG_NOTICE_DEBUG("res_redis loaded\n");
 	
 	return AST_MODULE_LOAD_SUCCESS;
@@ -802,6 +824,7 @@ static int unload_module(void)
 
 	cleanup_module();
 	ast_debug(1, "Done Unloading res_config_redis...\n");
+	AST_LOG_NOTICE_DEBUG("Done Unloading res_config_redis...\n");
 	return 0;
 }
 

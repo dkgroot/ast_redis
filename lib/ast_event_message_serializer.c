@@ -279,7 +279,7 @@ exception_t message2json(char *msg, const size_t msg_len, const struct ast_event
 }
 
 /* generic json to ast_event decoder */
-exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg)
+exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *msg, boolean_t *cacheable)
 {
 	exception_t res = DECODING_EXCEPTION;
 	struct ast_event *event = *eventref;
@@ -291,7 +291,7 @@ exception_t json2message(struct ast_event **eventref, enum ast_event_type event_
 	char *key = NULL;
 	char *value = NULL;
 	char delims[]=",";
-	int cachable = 0;
+	int cache = 0;;
 
 //	if (!(event = ast_event_new(event_type, AST_EVENT_IE_END))) {		/* can't use this because it automatically adds my local EID to the new event */
 //		return DECODING_EXCEPTION;
@@ -328,7 +328,7 @@ exception_t json2message(struct ast_event **eventref, enum ast_event_type event_
 					break;
 				case AST_EVENT_IE_PLTYPE_UINT:
 					if (ie_type == AST_EVENT_IE_CACHABLE) {
-						cachable = atoi(value);
+						cache = atoi(value);
 					}
 					ast_event_append_ie_uint(&event, ie_type, atoi(value));
 					break;
@@ -365,8 +365,9 @@ exception_t json2message(struct ast_event **eventref, enum ast_event_type event_
 	}
 
 	ast_debug(1, "decoded msg into event\n");
+	*cacheable = cache ? TRUE : FALSE;
 	*eventref = event;
-	return OK + cachable;
+	return NO_EXCEPTION;
 
 failed:
 	ast_event_destroy(event);

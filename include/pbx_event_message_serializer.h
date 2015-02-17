@@ -25,6 +25,6 @@ exception_t pbx_publish(event_type_t event_type, char *jsonmsgbuffer, size_t buf
 
 /* should become private instead / to be removed*/
 exception_t message2json(char *jsonmsgbuffer, const size_t msg_len, const struct ast_event *event);
-exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *jsonmsgbuffer);
+exception_t json2message(struct ast_event **eventref, enum ast_event_type event_type, const char *jsonmsgbuffer, boolean_t *cacheable);
 
 #endif /* _AST_EVENT_MESSAGE_SERIALIZER_H_ */

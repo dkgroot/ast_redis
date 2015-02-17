@@ -37,7 +37,7 @@ static struct {
 	const char *str;
 } exception2str[] = {
 	[NO_EXCEPTION] = {""},
-	[EID_SELF_EXCEPTION] = {"EID Same as out own"},
+	[EID_SELF_EXCEPTION] = {"EID Same as our own"},
 	[MALLOC_EXCEPTION] = {"Malloc/Free Exception"},
 	[LIBEVENT_EXCEPTION] = {"LibEvent Exception"},
 	[EXISTS_EXCEPTION] = {"Already Exists Exception"},
@@ -46,11 +46,14 @@ static struct {
 	[GENERAL_EXCEPTION] = {"General Exception"},
 };
 
+/*
 enum returnvalues {
-//	EID_SELF	= 1,
+	ERROR		= 0,
+	EID_SELF	= 1,
 	OK		= 2,
 	OK_CACHABLE	= 3,
 };
+*/
 
 typedef enum event_type {
 	EVENT_ALL			= 0x00,
