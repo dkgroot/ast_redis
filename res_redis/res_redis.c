@@ -52,6 +52,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision: 419592 $")
 /* globals */
 AST_RWLOCK_DEFINE_STATIC(event_types_lock);
 AST_MUTEX_DEFINE_STATIC(redis_lock);
+AST_MUTEX_DEFINE_STATIC(redis_write_lock);
 
 #define MAX_EVENT_LENGTH 1024
 pthread_t dispatch_thread_id = AST_PTHREADT_NULL;
@@ -401,14 +402,21 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 
 			ast_event_queue(event);
 		*/
+		/*
+		ast_mutex_lock(&redis_write_lock);
 		redisAsyncCommand(redisPubConn, redis_meet_cb, NULL, "MEET");
 		if (redisPubConn->err) {
 			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 		}
+		ast_mutex_unlock(&redis_write_lock);
+		*/
+		
+		ast_mutex_lock(&redis_write_lock);
 		redisAsyncCommand(redisPubConn, redis_pong_cb, (char*)eid_str, "PING");
 		if (redisPubConn->err) {
 			ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 		}
+		ast_mutex_unlock(&redis_write_lock);
 	}
 	
 	if (ast_eid_cmp(&ast_eid_default, eid)) {
@@ -444,10 +452,12 @@ static void ast_event_cb(const struct ast_event *event, void *data)
 			if (!message2json(msg, MAX_EVENT_LENGTH, event)) {
 #endif
 				AST_LOG_NOTICE_DEBUG("sending 'PUBLISH %s \"%s\"'\n", etype->channelstr, msg);
+				ast_mutex_lock(&redis_write_lock);
 				redisAsyncCommand(redisPubConn, redis_publish_cb, NULL, "PUBLISH %s %b", etype->channelstr, msg, (size_t)strlen(msg));
 				if (redisPubConn->err) {
 					ast_log(LOG_ERROR, "redisAsyncCommand Send error: %s\n", redisPubConn->errstr);
 				}
+				ast_mutex_unlock(&redis_write_lock);
 			} else {
 				ast_log(LOG_ERROR, "error encoding %s'\n", msg);
 			}
